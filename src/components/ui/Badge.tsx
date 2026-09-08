@@ -1,9 +1,13 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type BadgeStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled";
 
 export interface BadgeProps {
   status: BadgeStatus;
+  /** Overrides the default status label — e.g. reusing the "paid" (green)
+   * styling for a customer's "Active" status, which has no canonical entry. */
+  children?: ReactNode;
   className?: string;
 }
 
@@ -23,7 +27,7 @@ const statusClasses: Record<BadgeStatus, string> = {
   cancelled: "bg-badge-cancelled text-badge-cancelled-foreground",
 };
 
-export function Badge({ status, className }: BadgeProps) {
+export function Badge({ status, children, className }: BadgeProps) {
   return (
     <span
       className={cn(
@@ -32,7 +36,7 @@ export function Badge({ status, className }: BadgeProps) {
         className
       )}
     >
-      {statusLabels[status]}
+      {children ?? statusLabels[status]}
     </span>
   );
 }

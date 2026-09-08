@@ -29,14 +29,17 @@ export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowEle
   );
 }
 
-export function TableHead({
-  className,
-  ...props
-}: ThHTMLAttributes<HTMLTableCellElement>) {
+export interface TableHeadProps extends ThHTMLAttributes<HTMLTableCellElement> {
+  /** Right-align per the Design System's numeric-alignment rule. */
+  numeric?: boolean;
+}
+
+export function TableHead({ className, numeric = false, ...props }: TableHeadProps) {
   return (
     <th
       className={cn(
-        "px-4 py-3 text-start text-xs font-medium uppercase tracking-wide text-muted-foreground",
+        "px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground",
+        numeric ? "text-end" : "text-start",
         className
       )}
       {...props}
@@ -44,9 +47,20 @@ export function TableHead({
   );
 }
 
-export function TableCell({
-  className,
-  ...props
-}: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn("px-4 py-3 text-foreground", className)} {...props} />;
+export interface TableCellProps extends TdHTMLAttributes<HTMLTableCellElement> {
+  /** Right-align per the Design System's numeric-alignment rule. */
+  numeric?: boolean;
+}
+
+export function TableCell({ className, numeric = false, ...props }: TableCellProps) {
+  return (
+    <td
+      className={cn(
+        "px-4 py-3 text-foreground",
+        numeric ? "text-end" : undefined,
+        className
+      )}
+      {...props}
+    />
+  );
 }
