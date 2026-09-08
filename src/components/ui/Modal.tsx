@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CloseIcon } from "./icons";
+import { IconButton } from "./IconButton";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -48,14 +49,14 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
         {title && (
           <div className="flex items-center justify-between border-b border-border p-4">
             <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-            <button
-              type="button"
+            <IconButton
+              size="sm"
+              hoverBackground="background"
               onClick={onClose}
               aria-label="Close"
-              className="rounded-button p-1 text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald"
             >
               <CloseIcon className="h-4 w-4" />
-            </button>
+            </IconButton>
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-4">{children}</div>

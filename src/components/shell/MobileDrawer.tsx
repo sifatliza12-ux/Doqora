@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { IconButton } from "@/components/ui/IconButton";
 import { CloseIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import { NavList } from "./NavList";
@@ -55,14 +56,9 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
           <span className="text-sm font-semibold tracking-wide text-foreground">
             Doqora
           </span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close navigation menu"
-            className="rounded-button p-1.5 text-muted-foreground hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald"
-          >
+          <IconButton onClick={onClose} aria-label="Close navigation menu">
             <CloseIcon className="h-5 w-5" />
-          </button>
+          </IconButton>
         </div>
         <div className="flex-1 overflow-y-auto">
           <NavList onNavigate={onClose} />

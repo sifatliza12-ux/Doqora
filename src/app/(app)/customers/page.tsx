@@ -1,6 +1,7 @@
 import type { BadgeStatus } from "@/components/ui/Badge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { PlusIcon, SearchIcon } from "@/components/ui/icons";
 import {
   Table,
@@ -56,13 +57,9 @@ export default function CustomersPage() {
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold text-foreground">Customers</h1>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Search customers"
-            className="rounded-button p-2 text-muted-foreground hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald"
-          >
+          <IconButton size="lg" aria-label="Search customers">
             <SearchIcon className="h-4 w-4" />
-          </button>
+          </IconButton>
           <Button variant="primary">
             <PlusIcon className="h-4 w-4" />
             New
