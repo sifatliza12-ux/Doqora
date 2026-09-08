@@ -1,26 +1,75 @@
+/*
+ * Doqora Design System v2.0 — CSS custom properties (Tailwind v4 CSS-first
+ * config, no tailwind.config.ts). The @theme block below generates Tailwind
+ * utility classes (bg-*, text-*, rounded-*, shadow-*, font-*) directly.
+ *
+ * This file MUST be kept in sync manually with the plain JS/TS token values
+ * in `src/lib/design-tokens.ts` (used by @react-pdf/renderer, which cannot
+ * consume Tailwind classes or CSS variables). Tailwind v4 has no built-in
+ * mechanism to generate one from the other.
+ */
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* App workspace (always dark — no light-mode variant) */
+  --color-background: #0b1220;
+  --color-sidebar: #111827;
+  --color-surface: #172033;
+  --color-border: #1e293b;
+  --color-foreground: #f1f5f9;
+  --color-muted-foreground: #94a3b8;
+
+  /* Primary/Action */
+  --color-emerald: #10b981;
+  /* Accent — sparingly: selected invoice, net amount, premium touch-points only */
+  --color-copper: #c58b3a;
+
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  /* Invoice document (always light, regardless of app theme) */
+  --color-sheet-background: #ffffff;
+  /* Primary/body invoice text */
+  --color-sheet-foreground: #000000;
+  /* Invoice headings/emphasis */
+  --color-sheet-heading: #0f172a;
+  --color-sheet-muted-foreground: #64748b;
+  --color-sheet-border: #e2e8f0;
+
+  /* Border radius */
+  --radius-input: 8px;
+  --radius-button: 8px;
+  --radius-table: 12px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
+  --radius-sheet: 0px;
+
+  /* Status badges */
+  --color-badge-draft: #f1f5f9;
+  --color-badge-draft-foreground: #475569;
+  --color-badge-sent: #dbeafe;
+  --color-badge-sent-foreground: #1e40af;
+  --color-badge-paid: #dcfce7;
+  --color-badge-paid-foreground: #166534;
+  --color-badge-overdue: #fef3c7;
+  --color-badge-overdue-foreground: #92400e;
+  --color-badge-cancelled: #fee2e2;
+  --color-badge-cancelled-foreground: #991b1b;
+
+  /* Invoice sheet paper shadow (two layers, not a card shadow) */
+  --shadow-sheet: 0 2px 8px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.18);
+
+  /* Typography */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-arabic: var(--font-noto-arabic), ui-sans-serif, system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
 }

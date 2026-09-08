@@ -1,0 +1,204 @@
+// Doqora — Prisma schema (Stage 0)
+//
+// Conventions:
+// - Every business-owned model has a `businessId` FK with an index.
+// - Decimal (never Float) for all monetary/quantity fields.
+// - customerSnapshot / businessSnapshot on Invoice are immutable: rendering
+//   ALWAYS reads these, never re-joins live Customer/Business data.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum LanguageMode {
+  ENGLISH
+  ARABIC
+  BILINGUAL
+}
+
+enum BusinessRole {
+  OWNER
+  MEMBER
+}
+
+enum InvoiceType {
+  TAX_INVOICE
+  STANDARD
+  PROFORMA
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model User {
+  id          String   @id @default(cuid())
+  clerkUserId String   @unique
+  email       String
+  name        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships BusinessMember[]
+}
+
+model Business {
+  id                  String       @id @default(cuid())
+  name                String
+  nameAr              String?
+  address             String?
+  addressAr           String?
+  city                String?
+  country             String?
+  phone               String?
+  email               String?
+  website             String?
+  crNumber            String?
+  vatNumber           String?
+  businessActivity    String?
+  logoUrl             String?
+  brandColorPrimary   String       @default("#10B981")
+  brandColorAccent    String       @default("#C58B3A")
+  currencyCode        String       @default("SAR")
+  invoicePrefix       String       @default("INV-")
+  nextInvoiceNumber   Int          @default(1)
+  defaultLanguageMode LanguageMode @default(BILINGUAL)
+  defaultTemplate     String       @default("saudi-bilingual")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  members      BusinessMember[]
+  customers    Customer[]
+  invoices     Invoice[]
+  bankAccounts BusinessBankAccount[]
+}
+
+model BusinessMember {
+  id         String       @id @default(cuid())
+  userId     String
+  businessId String
+  role       BusinessRole @default(OWNER)
+  createdAt  DateTime     @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+}
+
+model BusinessBankAccount {
+  id            String   @id @default(cuid())
+  businessId    String
+  bankName      String
+  accountName   String
+  accountNumber String
+  iban          String
+  swiftCode     String?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+}
+
+model Customer {
+  id            String   @id @default(cuid())
+  businessId    String
+  name          String
+  nameAr        String?
+  companyName   String?
+  companyNameAr String?
+  vatNumber     String?
+  crNumber      String?
+  address       String?
+  addressAr     String?
+  city          String?
+  country       String?
+  phone         String?
+  email         String?
+  poBox         String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  business Business  @relation(fields: [businessId], references: [id])
+  invoices Invoice[]
+
+  @@index([businessId])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  businessId      String
+  // Lookup only — rendering always reads customerSnapshot, never this relation.
+  customerId      String?
+  invoiceNumber   String
+  invoiceType     InvoiceType
+  status          InvoiceStatus @default(DRAFT)
+  statusUpdatedAt DateTime      @default(now())
+  issueDate       DateTime
+  dueDate         DateTime
+  currencyCode    String
+  poNumber        String?
+  referenceNumber String?
+  notes           String?
+  notesAr         String?
+  languageMode    LanguageMode
+
+  // Immutable at creation time — never re-derived from live Customer/Business rows.
+  customerSnapshot Json
+  businessSnapshot Json
+
+  subtotal       Decimal @db.Decimal(14, 2)
+  discountAmount Decimal @db.Decimal(14, 2)
+  vatAmount      Decimal @db.Decimal(14, 2)
+  totalAmount    Decimal @db.Decimal(14, 2)
+
+  amountInWordsEn String?
+  amountInWordsAr String?
+  qrCodeData      String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business      @relation(fields: [businessId], references: [id])
+  customer Customer?     @relation(fields: [customerId], references: [id])
+  items    InvoiceItem[]
+
+  @@unique([businessId, invoiceNumber])
+  @@index([businessId])
+  @@index([customerId])
+}
+
+model InvoiceItem {
+  id            String  @id @default(cuid())
+  invoiceId     String
+  description   String
+  descriptionAr String?
+  quantity      Decimal @db.Decimal(10, 3)
+  unit          String?
+  rate          Decimal @db.Decimal(14, 2)
+  discount      Decimal @default(0) @db.Decimal(14, 2)
+  vatRate       Decimal @default(15) @db.Decimal(5, 2)
+  vatAmount     Decimal @db.Decimal(14, 2)
+  lineTotal     Decimal @db.Decimal(14, 2)
+  sortOrder     Int
+
+  createdAt DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+}
