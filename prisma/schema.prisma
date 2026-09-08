@@ -54,6 +54,7 @@ model User {
 
 model Business {
   id                  String       @id @default(cuid())
+  clerkOrgId          String?      @unique
   name                String
   nameAr              String?
   address             String?
