@@ -21,12 +21,16 @@
 
   /* Primary/Action */
   --color-emerald: #10b981;
+  /* Text/icon color on top of a solid emerald fill (e.g. primary buttons) */
+  --color-emerald-foreground: #ffffff;
   /* Accent — sparingly: selected invoice, net amount, premium touch-points only */
   --color-copper: #c58b3a;
 
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-danger: #dc2626;
+  /* Text/icon color on top of a solid danger fill (e.g. destructive buttons) */
+  --color-danger-foreground: #ffffff;
 
   /* Invoice document (always light, regardless of app theme) */
   --color-sheet-background: #ffffff;

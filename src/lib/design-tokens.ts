@@ -18,10 +18,14 @@ export const colors = {
   foreground: "#F1F5F9",
   mutedForeground: "#94A3B8",
   emerald: "#10B981",
+  // Text/icon color on top of a solid emerald fill (e.g. primary buttons)
+  emeraldForeground: "#FFFFFF",
   copper: "#C58B3A",
   success: "#16A34A",
   warning: "#D97706",
   danger: "#DC2626",
+  // Text/icon color on top of a solid danger fill (e.g. destructive buttons)
+  dangerForeground: "#FFFFFF",
   sheet: {
     background: "#FFFFFF",
     // Primary/body invoice text
