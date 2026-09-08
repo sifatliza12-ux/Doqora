@@ -21,7 +21,7 @@ async function main() {
     data: {
       businessId: business.id,
       bankName: "National Commercial Bank – Jeddah",
-      accountName: business.name,
+      accountName: "Sarah Riyadh Al-Ruwaili Company for Operation and Maintenance",
       accountNumber: "01400036758704",
       iban: "SA6610000001400036758704",
       swiftCode: "NCBKSAJE",
