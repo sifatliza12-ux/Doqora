@@ -1,16 +1,9 @@
 import type { Business, BusinessBankAccount, InvoiceType } from "@prisma/client";
 import { InvoiceSheet } from "@/components/ui/InvoiceSheet";
+import type { AmountInWords } from "@/lib/amount-in-words";
 import type { CalculatedInvoice } from "@/lib/invoice-calculations";
 import { InvoiceQrCode } from "./InvoiceQrCode";
 import type { LineItemDraft } from "./line-item-draft";
-
-// Amount-in-words generation (English/Arabic) is a separate future
-// milestone — this stays as the same static placeholder text the locked
-// mock already showed, deliberately not derived from totalAmount.
-const amountInWordsPlaceholder = {
-  en: "Two hundred eighty-three thousand one hundred ten riyals and sixty-eight halalas.",
-  ar: "مائتان وثلاثة وثمانون ألفًا ومائة وعشرة ريالات وثمانية وستون هللة.",
-};
 
 const INVOICE_TYPE_LABELS: Record<InvoiceType, { en: string; ar: string }> = {
   TAX_INVOICE: { en: "Tax invoice", ar: "فاتورة ضريبية" },
@@ -62,6 +55,7 @@ export function InvoiceSheetPreview({
   lineItems,
   calculated,
   qrPayload,
+  amountInWords,
 }: {
   business: Business;
   bankAccount: BusinessBankAccount | null;
@@ -74,6 +68,7 @@ export function InvoiceSheetPreview({
   lineItems: LineItemDraft[];
   calculated: CalculatedInvoice;
   qrPayload: string;
+  amountInWords: AmountInWords;
 }) {
   const typeLabel = INVOICE_TYPE_LABELS[invoiceType];
 
@@ -227,15 +222,15 @@ export function InvoiceSheetPreview({
 
       <SectionDivider />
 
-      {/* Amount in words — static placeholder, real generation is a future milestone */}
+      {/* Amount in words */}
       <div className="flex flex-col gap-4 px-8 py-6 text-sm">
         <div className="flex flex-col gap-1">
           <p className="font-medium text-sheet-heading">Amount in words:</p>
-          <p className="text-sheet-muted-foreground">{amountInWordsPlaceholder.en}</p>
+          <p className="text-sheet-muted-foreground">{amountInWords.en}</p>
         </div>
         <div dir="rtl" className="flex flex-col gap-1 text-left">
           <p className="font-medium text-sheet-heading">المبلغ كتابة:</p>
-          <p className="text-sheet-muted-foreground">{amountInWordsPlaceholder.ar}</p>
+          <p className="text-sheet-muted-foreground">{amountInWords.ar}</p>
         </div>
       </div>
 

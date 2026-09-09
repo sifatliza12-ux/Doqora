@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils";
+import { amountToWords } from "@/lib/amount-in-words";
 import { calculateInvoice } from "@/lib/invoice-calculations";
 import { buildInvoiceQrPayload } from "@/lib/invoice-qr";
 import { saveInvoiceDraft } from "@/server/invoice-actions";
@@ -84,6 +85,14 @@ export function InvoiceBuilder({
     vatAmount: calculated.vatAmount,
     issueDate,
   });
+
+  // Same live-compute treatment as the QR payload above — regenerated from
+  // the current total on every render, never read from the stored
+  // Invoice.amountInWordsEn/Ar fields.
+  const amountInWords = useMemo(
+    () => amountToWords(calculated.totalAmount, business.currencyCode),
+    [calculated.totalAmount, business.currencyCode]
+  );
 
   function updateLineItem(key: string, field: keyof LineItemDraft, value: string) {
     setLineItems((prev) =>
@@ -325,6 +334,7 @@ export function InvoiceBuilder({
             lineItems={lineItems}
             calculated={calculated}
             qrPayload={qrPayload}
+            amountInWords={amountInWords}
           />
         </div>
       </div>

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { Business, InvoiceType } from "@prisma/client";
+import { amountToWords } from "@/lib/amount-in-words";
 import { calculateInvoice, type LineItemCalcInput } from "@/lib/invoice-calculations";
 import { buildInvoiceQrPayload } from "@/lib/invoice-qr";
 import { prisma } from "@/lib/prisma";
@@ -136,6 +137,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
       vatAmount: calculated.vatAmount,
       issueDate: input.issueDate,
     });
+    const amountWords = amountToWords(calculated.totalAmount, existing.currencyCode);
 
     // Line items are fully replaced on every save rather than diffed —
     // simplest correct behavior for a list that can be freely
@@ -157,6 +159,8 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
           vatAmount: calculated.vatAmount,
           totalAmount: calculated.totalAmount,
           qrCodeData,
+          amountInWordsEn: amountWords.en,
+          amountInWordsAr: amountWords.ar,
           items: { create: itemsData },
         },
       }),
@@ -188,6 +192,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
       vatAmount: calculated.vatAmount,
       issueDate: input.issueDate,
     });
+    const amountWords = amountToWords(calculated.totalAmount, updatedBusiness.currencyCode);
 
     return tx.invoice.create({
       data: {
@@ -208,6 +213,8 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
         vatAmount: calculated.vatAmount,
         totalAmount: calculated.totalAmount,
         qrCodeData,
+        amountInWordsEn: amountWords.en,
+        amountInWordsAr: amountWords.ar,
         items: { create: itemsData },
       },
     });
