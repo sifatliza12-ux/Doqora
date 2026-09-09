@@ -1,20 +1,8 @@
 import type { Business, BusinessBankAccount, InvoiceType } from "@prisma/client";
 import { InvoiceSheet } from "@/components/ui/InvoiceSheet";
 import type { CalculatedInvoice } from "@/lib/invoice-calculations";
+import { InvoiceQrCode } from "./InvoiceQrCode";
 import type { LineItemDraft } from "./line-item-draft";
-
-// Purely decorative "QR-like" placeholder — NOT a real QR code. Real QR
-// generation is a separate future milestone; this stays exactly as it was
-// in the locked mock.
-const qrPattern = [
-  [1, 1, 1, 0, 1, 1, 1],
-  [1, 0, 1, 0, 1, 0, 1],
-  [1, 1, 1, 0, 1, 1, 1],
-  [0, 0, 0, 1, 0, 0, 0],
-  [1, 1, 1, 0, 1, 1, 1],
-  [1, 0, 1, 0, 1, 0, 1],
-  [1, 1, 1, 0, 1, 1, 1],
-];
 
 // Amount-in-words generation (English/Arabic) is a separate future
 // milestone — this stays as the same static placeholder text the locked
@@ -73,6 +61,7 @@ export function InvoiceSheetPreview({
   dueDate,
   lineItems,
   calculated,
+  qrPayload,
 }: {
   business: Business;
   bankAccount: BusinessBankAccount | null;
@@ -84,6 +73,7 @@ export function InvoiceSheetPreview({
   dueDate: string;
   lineItems: LineItemDraft[];
   calculated: CalculatedInvoice;
+  qrPayload: string;
 }) {
   const typeLabel = INVOICE_TYPE_LABELS[invoiceType];
 
@@ -251,7 +241,7 @@ export function InvoiceSheetPreview({
 
       <SectionDivider />
 
-      {/* Footer: bank details + decorative QR placeholder */}
+      {/* Footer: bank details + QR code */}
       <div className="p-8">
         <div className="grid grid-cols-1 gap-6 rounded-sheet border border-sheet-border p-4 sm:grid-cols-[1fr_auto] sm:items-center">
           <div className="flex flex-col gap-1 text-sm">
@@ -269,14 +259,10 @@ export function InvoiceSheetPreview({
               <p className="text-sheet-muted-foreground">No bank account on file.</p>
             )}
           </div>
-          <div
-            className="grid h-20 w-20 grid-cols-7 grid-rows-7 self-center border border-sheet-border sm:justify-self-end"
-            aria-hidden="true"
-          >
-            {qrPattern.flat().map((cell, i) => (
-              <div key={i} className={cell ? "bg-sheet-foreground" : "bg-sheet-background"} />
-            ))}
-          </div>
+          <InvoiceQrCode
+            data={qrPayload}
+            className="h-20 w-20 self-center border border-sheet-border sm:justify-self-end"
+          />
         </div>
       </div>
     </InvoiceSheet>

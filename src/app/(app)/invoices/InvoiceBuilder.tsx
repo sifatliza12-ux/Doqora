@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils";
 import { calculateInvoice } from "@/lib/invoice-calculations";
+import { buildInvoiceQrPayload } from "@/lib/invoice-qr";
 import { saveInvoiceDraft } from "@/server/invoice-actions";
 import type { InvoiceBuilderContext, InvoiceDraftForEdit } from "@/server/invoices";
 import { InvoiceSheetPreview } from "./InvoiceSheetPreview";
@@ -70,6 +71,19 @@ export function InvoiceBuilder({
   const invoiceNumberPreview = invoice
     ? invoice.invoiceNumber
     : `${business.invoicePrefix}${business.nextInvoiceNumber}`;
+
+  // Always regenerated live from current form state — same treatment as
+  // subtotal/vatAmount/totalAmount above, so the QR can never show data
+  // that's out of sync with unsaved edits. The stored Invoice.qrCodeData
+  // (written at save time) exists for future read-only views, not for
+  // driving this preview.
+  const qrPayload = buildInvoiceQrPayload({
+    invoiceNumber: invoiceNumberPreview,
+    businessName: business.name,
+    totalAmount: calculated.totalAmount,
+    vatAmount: calculated.vatAmount,
+    issueDate,
+  });
 
   function updateLineItem(key: string, field: keyof LineItemDraft, value: string) {
     setLineItems((prev) =>
@@ -310,6 +324,7 @@ export function InvoiceBuilder({
             dueDate={dueDate}
             lineItems={lineItems}
             calculated={calculated}
+            qrPayload={qrPayload}
           />
         </div>
       </div>

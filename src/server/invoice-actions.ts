@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { Business, InvoiceType } from "@prisma/client";
 import { calculateInvoice, type LineItemCalcInput } from "@/lib/invoice-calculations";
+import { buildInvoiceQrPayload } from "@/lib/invoice-qr";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentBusinessId } from "@/server/business";
 
@@ -128,6 +129,13 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
 
     const business = await prisma.business.findUniqueOrThrow({ where: { id: businessId } });
     const businessSnapshot = buildBusinessSnapshot(business);
+    const qrCodeData = buildInvoiceQrPayload({
+      invoiceNumber: existing.invoiceNumber,
+      businessName: business.name,
+      totalAmount: calculated.totalAmount,
+      vatAmount: calculated.vatAmount,
+      issueDate: input.issueDate,
+    });
 
     // Line items are fully replaced on every save rather than diffed —
     // simplest correct behavior for a list that can be freely
@@ -148,6 +156,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
           discountAmount: calculated.discountAmount,
           vatAmount: calculated.vatAmount,
           totalAmount: calculated.totalAmount,
+          qrCodeData,
           items: { create: itemsData },
         },
       }),
@@ -172,6 +181,13 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
     const assignedNumber = updatedBusiness.nextInvoiceNumber - 1;
     const invoiceNumber = `${updatedBusiness.invoicePrefix}${assignedNumber}`;
     const businessSnapshot = buildBusinessSnapshot(updatedBusiness);
+    const qrCodeData = buildInvoiceQrPayload({
+      invoiceNumber,
+      businessName: updatedBusiness.name,
+      totalAmount: calculated.totalAmount,
+      vatAmount: calculated.vatAmount,
+      issueDate: input.issueDate,
+    });
 
     return tx.invoice.create({
       data: {
@@ -191,6 +207,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
         discountAmount: calculated.discountAmount,
         vatAmount: calculated.vatAmount,
         totalAmount: calculated.totalAmount,
+        qrCodeData,
         items: { create: itemsData },
       },
     });
