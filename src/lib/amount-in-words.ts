@@ -24,9 +24,16 @@
 //      the singular accusative form (ريالاً) instead. This is exactly the
 //      class of bug the user warned to check for, and it's why this file
 //      hand-writes the noun-form selection (a small, fully-enumerable
-//      5-case table) instead of trusting the library's currency layer,
+//      case table) instead of trusting the library's currency layer,
 //      while still delegating the genuinely hard part — the cardinal
 //      number-to-words conversion itself — to n2words's toCardinal.
+//
+//   3. Case marking on round hundreds/thousands (100, 5000, ...): the
+//      noun there follows a scale word (مائة/آلاف/...) in an idafa
+//      (construct) relationship, which takes a genitive — not accusative
+//      — noun, so it gets the bare singular rather than the
+//      accusative-tanwin form the 11-99 tamyiz case correctly uses. See
+//      arabicUnitPhrase()'s "lastTwoDigits === 0" branch.
 import { Decimal } from "decimal.js";
 import { toCardinal as arCardinal } from "n2words/ar-SA";
 import { toCardinal as enCardinal } from "n2words/en";
@@ -34,12 +41,10 @@ import { toCardinal as enCardinal } from "n2words/en";
 export type DecimalInput = string | number | Decimal;
 
 /**
- * [count=1, count=2, count 3-10, count 11-99-or-other] — the four forms
- * Arabic nouns take depending on what precedes them. Index 3 also covers a
- * bare multiple of 100/1000 (e.g. 100, 200): n2words's own vocabulary uses
- * a single fallback form for that case too, matching the convention this
- * project's reference material follows (ألفًا carries the same tanwin
- * marking whether it's "283 thousand" or a bare "200 thousand").
+ * [count=1, count=2, count 3-10, count 11-99] — the four forms Arabic
+ * nouns take depending on what precedes them. Index 0 (the bare singular)
+ * is also reused for a round multiple of 100/1000/etc — see
+ * arabicUnitPhrase()'s "lastTwoDigits === 0" branch below.
  */
 type ArabicNounForms = [string, string, string, string];
 
@@ -80,6 +85,10 @@ function arabicUnitPhrase(
   forms: ArabicNounForms,
   nounTrueGender: "masculine" | "feminine"
 ): string {
+  // Zero is left as accusative (forms[3]) deliberately: unlike the
+  // round-hundred/thousand case below, there's no confirmed reference
+  // example either way for "zero X" — low-confidence, low-stakes, not
+  // worth guessing at further.
   if (count === 0) return `${AR_ZERO} ${forms[3]}`;
   if (count === 1) {
     return `${forms[0]} ${nounTrueGender === "feminine" ? AR_ONE_FEMININE : AR_ONE_MASCULINE}`;
@@ -92,7 +101,17 @@ function arabicUnitPhrase(
   if (lastTwoDigits >= 3 && lastTwoDigits <= 10) {
     return `${numberWords} ${forms[2]}`; // plural
   }
-  return `${numberWords} ${forms[3]}`; // 0, or 11-99: singular accusative
+  if (lastTwoDigits === 0) {
+    // Round hundred/thousand/etc (100, 500, 5000, ...): the noun directly
+    // follows a scale word (مائة/ألف/آلاف/...) in an idafa (construct)
+    // relationship — "thousands OF riyal" — not a tamyiz relationship like
+    // the 11-99 case below. The second noun in an idafa is genitive, and
+    // genitive indefinite nouns don't take the accusative-marking
+    // tanwin+alif, so this reuses the bare singular (forms[0], same word
+    // used for the count=1 idiom's noun half) rather than forms[3].
+    return `${numberWords} ${forms[0]}`;
+  }
+  return `${numberWords} ${forms[3]}`; // 11-99: singular accusative (tamyiz)
 }
 
 function arabicAmountToWords(major: number, minor: number): string {
