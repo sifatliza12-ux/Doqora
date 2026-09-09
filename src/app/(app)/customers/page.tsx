@@ -1,105 +1,48 @@
-import type { BadgeStatus } from "@/components/ui/Badge";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { IconButton } from "@/components/ui/IconButton";
-import { PlusIcon, SearchIcon } from "@/components/ui/icons";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/Table";
+import { OrganizationSwitcher } from "@clerk/nextjs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { getCustomersForCurrentBusiness } from "@/server/customers";
+import { CustomersView } from "./CustomersView";
 
 export const metadata = {
   title: "Customers — Doqora",
 };
 
-interface Customer {
-  name: string;
-  vatNumber: string;
-  invoiceCount: number;
-  status: "active" | "overdue";
-}
+export default async function CustomersPage() {
+  const result = await getCustomersForCurrentBusiness();
 
-const customers: Customer[] = [
-  {
-    name: "Saudi Radwa Food Co.",
-    vatNumber: "300281871800003",
-    invoiceCount: 6,
-    status: "active",
-  },
-  {
-    name: "ABC Trading Co.",
-    vatNumber: "300112233440003",
-    invoiceCount: 3,
-    status: "active",
-  },
-  {
-    name: "Al Khaleej Services",
-    vatNumber: "300998877660003",
-    invoiceCount: 1,
-    status: "overdue",
-  },
-];
+  if (result.status === "no-organization") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No active organization</CardTitle>
+          <CardDescription>
+            Select an existing organization or create a new one to manage customers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OrganizationSwitcher
+            hidePersonal
+            afterCreateOrganizationUrl="/customers"
+            afterSelectOrganizationUrl="/customers"
+          />
+        </CardContent>
+      </Card>
+    );
+  }
 
-// Customer status has no canonical badge entry of its own — "active" reuses
-// the "paid" (green) token/styling, "overdue" reuses the invoice one as-is.
-const statusBadge: Record<Customer["status"], { status: BadgeStatus; label: string }> = {
-  active: { status: "paid", label: "Active" },
-  overdue: { status: "overdue", label: "Overdue" },
-};
+  if (result.status === "not-found") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Setting up your workspace</CardTitle>
+          <CardDescription>
+            We&apos;re still finishing setup for this organization. Try refreshing in a
+            moment.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
-export default function CustomersPage() {
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold text-foreground">Customers</h1>
-        <div className="flex items-center gap-2">
-          <IconButton size="lg" aria-label="Search customers">
-            <SearchIcon className="h-4 w-4" />
-          </IconButton>
-          <Button variant="primary">
-            <PlusIcon className="h-4 w-4" />
-            New
-          </Button>
-        </div>
-      </div>
-
-      <Table className="min-w-max">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="whitespace-nowrap">Customer</TableHead>
-            <TableHead className="whitespace-nowrap">VAT</TableHead>
-            <TableHead numeric className="whitespace-nowrap">
-              Invoices
-            </TableHead>
-            <TableHead className="whitespace-nowrap">Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {customers.map((customer) => {
-            const badge = statusBadge[customer.status];
-            return (
-              <TableRow key={customer.vatNumber}>
-                <TableCell className="whitespace-nowrap font-medium">
-                  {customer.name}
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {customer.vatNumber}
-                </TableCell>
-                <TableCell numeric className="whitespace-nowrap">
-                  {customer.invoiceCount}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  <Badge status={badge.status}>{badge.label}</Badge>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
-  );
+  return <CustomersView customers={result.customers} />;
 }

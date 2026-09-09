@@ -1,26 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@clerk/nextjs/server";
 import type { LanguageMode } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-
-async function requireCurrentBusinessId(): Promise<string> {
-  const { orgId } = await auth();
-  if (!orgId) {
-    throw new Error("No active organization.");
-  }
-
-  const business = await prisma.business.findUnique({
-    where: { clerkOrgId: orgId },
-    select: { id: true },
-  });
-  if (!business) {
-    throw new Error("No business found for the active organization.");
-  }
-
-  return business.id;
-}
+import { requireCurrentBusinessId } from "@/server/business";
 
 const LANGUAGE_MODES: LanguageMode[] = ["ENGLISH", "ARABIC", "BILINGUAL"];
 function isLanguageMode(value: string): value is LanguageMode {

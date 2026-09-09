@@ -23,3 +23,23 @@ export async function getCurrentBusiness(): Promise<CurrentBusinessResult> {
   const { bankAccounts, ...business } = found;
   return { status: "ok", business, bankAccount: bankAccounts[0] ?? null };
 }
+
+// Shared by every 'use server' actions file that mutates business-owned data
+// (business-actions.ts, customer-actions.ts, ...) — always re-derives
+// businessId from the session, never trusts a client-supplied one.
+export async function requireCurrentBusinessId(): Promise<string> {
+  const { orgId } = await auth();
+  if (!orgId) {
+    throw new Error("No active organization.");
+  }
+
+  const business = await prisma.business.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true },
+  });
+  if (!business) {
+    throw new Error("No business found for the active organization.");
+  }
+
+  return business.id;
+}

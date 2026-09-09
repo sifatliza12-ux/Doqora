@@ -95,3 +95,14 @@ export function PlusIcon(props: SVGProps<SVGSVGElement>) {
     </IconBase>
   );
 }
+
+export function TrashIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 7h16" />
+      <path d="M9 7V4.75A1.75 1.75 0 0 1 10.75 3h2.5A1.75 1.75 0 0 1 15 4.75V7" />
+      <path d="M6 7l.9 12.1A2 2 0 0 0 8.9 21h6.2a2 2 0 0 0 2-1.9L18 7" />
+      <path d="M10 11v6M14 11v6" />
+    </IconBase>
+  );
+}
