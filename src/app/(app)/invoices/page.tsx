@@ -1,27 +1,48 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/Card";
+import { OrganizationSwitcher } from "@clerk/nextjs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { getInvoicesForCurrentBusiness } from "@/server/invoices";
+import { InvoicesView } from "./InvoicesView";
 
 export const metadata = {
   title: "Invoices — Doqora",
 };
 
-export default function InvoicesPage() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Invoices</CardTitle>
-        <CardDescription>
-          The invoice list and builder will be built in an upcoming milestone.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">Coming soon.</p>
-      </CardContent>
-    </Card>
-  );
+export default async function InvoicesPage() {
+  const result = await getInvoicesForCurrentBusiness();
+
+  if (result.status === "no-organization") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No active organization</CardTitle>
+          <CardDescription>
+            Select an existing organization or create a new one to manage invoices.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OrganizationSwitcher
+            hidePersonal
+            afterCreateOrganizationUrl="/invoices"
+            afterSelectOrganizationUrl="/invoices"
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (result.status === "not-found") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Setting up your workspace</CardTitle>
+          <CardDescription>
+            We&apos;re still finishing setup for this organization. Try refreshing in a
+            moment.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return <InvoicesView invoices={result.invoices} />;
 }
