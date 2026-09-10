@@ -107,8 +107,8 @@ export function InvoiceBuilder({
   // (written at save time) exists for future read-only views, not for
   // driving this preview.
   const qrPayload = buildInvoiceQrPayload({
-    invoiceNumber: invoiceNumberPreview,
-    businessName: business.name,
+    sellerName: business.name,
+    vatRegistrationNumber: business.vatNumber ?? "",
     totalAmount: calculated.totalAmount,
     vatAmount: calculated.vatAmount,
     issueDate,

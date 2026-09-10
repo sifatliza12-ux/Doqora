@@ -269,8 +269,8 @@ export async function getInvoiceForPrint(invoiceId: string, businessId: string):
   const qrPayload =
     invoice.qrCodeData ??
     buildInvoiceQrPayload({
-      invoiceNumber: invoice.invoiceNumber,
-      businessName: business.name,
+      sellerName: business.name,
+      vatRegistrationNumber: business.vatNumber ?? "",
       totalAmount: invoice.totalAmount,
       vatAmount: invoice.vatAmount,
       issueDate: toDateInputValue(invoice.issueDate),

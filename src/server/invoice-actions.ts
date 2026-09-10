@@ -131,8 +131,8 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
     const business = await prisma.business.findUniqueOrThrow({ where: { id: businessId } });
     const businessSnapshot = buildBusinessSnapshot(business);
     const qrCodeData = buildInvoiceQrPayload({
-      invoiceNumber: existing.invoiceNumber,
-      businessName: business.name,
+      sellerName: business.name,
+      vatRegistrationNumber: business.vatNumber ?? "",
       totalAmount: calculated.totalAmount,
       vatAmount: calculated.vatAmount,
       issueDate: input.issueDate,
@@ -186,8 +186,8 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
     const invoiceNumber = `${updatedBusiness.invoicePrefix}${assignedNumber}`;
     const businessSnapshot = buildBusinessSnapshot(updatedBusiness);
     const qrCodeData = buildInvoiceQrPayload({
-      invoiceNumber,
-      businessName: updatedBusiness.name,
+      sellerName: updatedBusiness.name,
+      vatRegistrationNumber: updatedBusiness.vatNumber ?? "",
       totalAmount: calculated.totalAmount,
       vatAmount: calculated.vatAmount,
       issueDate: input.issueDate,
@@ -355,8 +355,8 @@ export async function duplicateInvoice(invoiceId: string): Promise<DuplicateInvo
     const invoiceNumber = `${updatedBusiness.invoicePrefix}${assignedNumber}`;
     const businessSnapshot = buildBusinessSnapshot(updatedBusiness);
     const qrCodeData = buildInvoiceQrPayload({
-      invoiceNumber,
-      businessName: updatedBusiness.name,
+      sellerName: updatedBusiness.name,
+      vatRegistrationNumber: updatedBusiness.vatNumber ?? "",
       totalAmount: calculated.totalAmount,
       vatAmount: calculated.vatAmount,
       issueDate: today,
