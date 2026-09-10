@@ -116,6 +116,15 @@ export function DownloadIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function DuplicateIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <rect x="8.5" y="8.5" width="12" height="12" rx="1.5" />
+      <path d="M15.5 8.5V5.75A1.75 1.75 0 0 0 13.75 4h-8A1.75 1.75 0 0 0 4 5.75v8A1.75 1.75 0 0 0 5.75 15.5H8.5" />
+    </IconBase>
+  );
+}
+
 export function SpinnerIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <IconBase {...props} className={`animate-spin ${props.className ?? ""}`}>

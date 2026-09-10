@@ -8,8 +8,9 @@ import type { BadgeStatus } from "@/components/ui/Badge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
-import { PlusIcon } from "@/components/ui/icons";
+import { PlusIcon, TrashIcon } from "@/components/ui/icons";
 import { Select } from "@/components/ui/Select";
 import {
   Table,
@@ -20,6 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import type { InvoiceListRow } from "@/server/invoices";
+import { DeleteInvoiceModal } from "./DeleteInvoiceModal";
+import { DuplicateInvoiceButton } from "./DuplicateInvoiceButton";
 
 function formatCurrency(amount: number, currencyCode: string): string {
   return `${currencyCode} ${amount.toLocaleString("en-US", {
@@ -53,6 +56,7 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | InvoiceStatus>("all");
+  const [deletingInvoice, setDeletingInvoice] = useState<InvoiceListRow | null>(null);
 
   const filteredInvoices = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -125,12 +129,15 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
               </TableHead>
               <TableHead className="whitespace-nowrap">Status</TableHead>
               <TableHead className="whitespace-nowrap">Date</TableHead>
+              <TableHead className="whitespace-nowrap">
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredInvoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   No invoices match your search.
                 </TableCell>
               </TableRow>
@@ -156,12 +163,38 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {formatDate(invoice.issueDate)}
                   </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <div className="flex items-center gap-1">
+                      <DuplicateInvoiceButton
+                        invoiceId={invoice.id}
+                        variant="icon"
+                        onBeforeClick={(event) => event.stopPropagation()}
+                      />
+                      {invoice.status === "DRAFT" && (
+                        <IconButton
+                          aria-label={`Delete ${invoice.invoiceNumber}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDeletingInvoice(invoice);
+                          }}
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </IconButton>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       )}
+
+      <DeleteInvoiceModal
+        key={deletingInvoice?.id ?? "delete-empty"}
+        invoice={deletingInvoice}
+        onClose={() => setDeletingInvoice(null)}
+      />
     </div>
   );
 }

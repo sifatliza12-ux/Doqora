@@ -20,12 +20,14 @@ export function LineItemsEditor({
   onChange,
   onAdd,
   onRemove,
+  disabled = false,
 }: {
   lineItems: LineItemDraft[];
   calculatedLines: CalculatedLineItem[];
   onChange: (key: string, field: keyof LineItemDraft, value: string) => void;
   onAdd: () => void;
   onRemove: (key: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -42,21 +44,25 @@ export function LineItemsEditor({
                   label="Description"
                   value={item.description}
                   onChange={(event) => onChange(item.key, "description", event.target.value)}
+                  disabled={disabled}
                 />
                 <Input
                   label="Description (Arabic)"
                   value={item.descriptionAr}
                   onChange={(event) => onChange(item.key, "descriptionAr", event.target.value)}
                   dir="rtl"
+                  disabled={disabled}
                 />
               </div>
-              <IconButton
-                aria-label="Remove line item"
-                className="mt-6 shrink-0"
-                onClick={() => onRemove(item.key)}
-              >
-                <TrashIcon className="h-4 w-4" />
-              </IconButton>
+              {!disabled && (
+                <IconButton
+                  aria-label="Remove line item"
+                  className="mt-6 shrink-0"
+                  onClick={() => onRemove(item.key)}
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </IconButton>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -67,11 +73,13 @@ export function LineItemsEditor({
                 min="0"
                 value={item.quantity}
                 onChange={(event) => onChange(item.key, "quantity", event.target.value)}
+                disabled={disabled}
               />
               <Input
                 label="Unit"
                 value={item.unit}
                 onChange={(event) => onChange(item.key, "unit", event.target.value)}
+                disabled={disabled}
               />
               <Input
                 label="Rate"
@@ -80,6 +88,7 @@ export function LineItemsEditor({
                 min="0"
                 value={item.rate}
                 onChange={(event) => onChange(item.key, "rate", event.target.value)}
+                disabled={disabled}
               />
               <Input
                 label="Discount"
@@ -88,6 +97,7 @@ export function LineItemsEditor({
                 min="0"
                 value={item.discount}
                 onChange={(event) => onChange(item.key, "discount", event.target.value)}
+                disabled={disabled}
               />
               <Input
                 label="VAT %"
@@ -96,6 +106,7 @@ export function LineItemsEditor({
                 min="0"
                 value={item.vatRate}
                 onChange={(event) => onChange(item.key, "vatRate", event.target.value)}
+                disabled={disabled}
               />
             </div>
 
@@ -111,10 +122,12 @@ export function LineItemsEditor({
           </div>
         );
       })}
-      <Button type="button" variant="secondary" className="w-full" onClick={onAdd}>
-        <PlusIcon className="h-4 w-4" />
-        Add item
-      </Button>
+      {!disabled && (
+        <Button type="button" variant="secondary" className="w-full" onClick={onAdd}>
+          <PlusIcon className="h-4 w-4" />
+          Add item
+        </Button>
+      )}
     </div>
   );
 }

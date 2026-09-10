@@ -223,3 +223,199 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
   revalidatePath("/invoices");
   redirect(`/invoices/${created.id}`);
 }
+
+export type InvoiceStatusActionResult = { status: "success" } | { status: "error"; message: string };
+
+function revalidateInvoice(invoiceId: string) {
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/dashboard");
+}
+
+// Each transition's `where.status` doubles as the guard against illegal
+// moves (e.g. DRAFT -> PAID, or a double-click racing two transitions at
+// once) — matched atomically in the same query as the ownership check, so
+// an invalid transition and a wrong-tenant id fail exactly the same way.
+export async function markInvoiceSent(invoiceId: string): Promise<InvoiceStatusActionResult> {
+  const businessId = await requireCurrentBusinessId();
+  const result = await prisma.invoice.updateMany({
+    where: { id: invoiceId, businessId, status: "DRAFT" },
+    data: { status: "SENT", statusUpdatedAt: new Date() },
+  });
+  if (result.count === 0) {
+    return { status: "error", message: "Invoice not found or cannot be marked as sent." };
+  }
+  revalidateInvoice(invoiceId);
+  return { status: "success" };
+}
+
+export async function markInvoicePaid(invoiceId: string): Promise<InvoiceStatusActionResult> {
+  const businessId = await requireCurrentBusinessId();
+  const result = await prisma.invoice.updateMany({
+    where: { id: invoiceId, businessId, status: "SENT" },
+    data: { status: "PAID", statusUpdatedAt: new Date() },
+  });
+  if (result.count === 0) {
+    return { status: "error", message: "Invoice not found or cannot be marked as paid." };
+  }
+  revalidateInvoice(invoiceId);
+  return { status: "success" };
+}
+
+export async function cancelInvoice(invoiceId: string): Promise<InvoiceStatusActionResult> {
+  const businessId = await requireCurrentBusinessId();
+  const result = await prisma.invoice.updateMany({
+    where: { id: invoiceId, businessId, status: "SENT" },
+    data: { status: "CANCELLED", statusUpdatedAt: new Date() },
+  });
+  if (result.count === 0) {
+    return { status: "error", message: "Invoice not found or cannot be cancelled." };
+  }
+  revalidateInvoice(invoiceId);
+  return { status: "success" };
+}
+
+export type DeleteInvoiceResult = { status: "success" } | { status: "error"; message: string };
+
+// Draft-only, checked before touching anything: a sent/paid/cancelled
+// invoice is a finalized financial record, not something a UI action
+// should be able to erase. InvoiceItem has no onDelete: Cascade (see
+// schema.prisma), so its rows are removed explicitly in the same
+// transaction as the invoice itself.
+export async function deleteInvoice(invoiceId: string): Promise<DeleteInvoiceResult> {
+  const businessId = await requireCurrentBusinessId();
+
+  const existing = await prisma.invoice.findFirst({ where: { id: invoiceId, businessId } });
+  if (!existing) {
+    return { status: "error", message: "Invoice not found." };
+  }
+  if (existing.status !== "DRAFT") {
+    return { status: "error", message: "Only draft invoices can be deleted." };
+  }
+
+  await prisma.$transaction([
+    prisma.invoiceItem.deleteMany({ where: { invoiceId } }),
+    prisma.invoice.delete({ where: { id: invoiceId } }),
+  ]);
+
+  revalidatePath("/invoices");
+  revalidatePath("/dashboard");
+  return { status: "success" };
+}
+
+export type DuplicateInvoiceResult =
+  | { status: "success"; invoiceId: string; invoiceNumber: string }
+  | { status: "error"; message: string };
+
+// Available from any status (Draft, Sent, Paid, Cancelled all included —
+// e.g. duplicating a Cancelled invoice to redo it, or a Paid one to bill
+// the same customer again). Always produces a brand-new, independent
+// DRAFT: its own atomically-assigned invoice number, a fresh snapshot
+// taken now (never the source's frozen one), today's issue/due dates.
+// Only the customer link and line items carry over from the source.
+export async function duplicateInvoice(invoiceId: string): Promise<DuplicateInvoiceResult> {
+  const businessId = await requireCurrentBusinessId();
+
+  const source = await prisma.invoice.findFirst({
+    where: { id: invoiceId, businessId },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!source) {
+    return { status: "error", message: "Invoice not found." };
+  }
+
+  const lineInputs: LineItemCalcInput[] = source.items.map((item) => ({
+    quantity: item.quantity,
+    rate: item.rate,
+    discount: item.discount,
+    vatRate: item.vatRate,
+  }));
+  const calculated = calculateInvoice(lineInputs);
+  const itemsData = calculated.lines.map((line, index) => ({
+    description: source.items[index].description,
+    descriptionAr: source.items[index].descriptionAr,
+    quantity: line.quantity,
+    unit: source.items[index].unit,
+    rate: line.rate,
+    discount: line.discount,
+    vatRate: line.vatRate,
+    vatAmount: line.vatAmount,
+    lineTotal: line.lineTotal,
+    sortOrder: index,
+  }));
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const created = await prisma.$transaction(async (tx) => {
+    const updatedBusiness = await tx.business.update({
+      where: { id: businessId },
+      data: { nextInvoiceNumber: { increment: 1 } },
+    });
+    const assignedNumber = updatedBusiness.nextInvoiceNumber - 1;
+    const invoiceNumber = `${updatedBusiness.invoicePrefix}${assignedNumber}`;
+    const businessSnapshot = buildBusinessSnapshot(updatedBusiness);
+    const qrCodeData = buildInvoiceQrPayload({
+      invoiceNumber,
+      businessName: updatedBusiness.name,
+      totalAmount: calculated.totalAmount,
+      vatAmount: calculated.vatAmount,
+      issueDate: today,
+    });
+    const amountWords = amountToWords(calculated.totalAmount, updatedBusiness.currencyCode);
+
+    // If the source's customer still exists, snapshot it fresh (same as a
+    // normal create). If it's since been deleted, fall back to the
+    // source's own frozen snapshot rather than leaving the duplicate with
+    // no data at all — same orphaned-draft pattern the builder already
+    // handles for relinking a deleted customer.
+    let customerId = source.customerId;
+    let customerSnapshot = source.customerSnapshot;
+    if (customerId) {
+      const customer = await tx.customer.findFirst({ where: { id: customerId, businessId } });
+      if (customer) {
+        customerSnapshot = {
+          name: customer.name,
+          nameAr: customer.nameAr,
+          companyName: customer.companyName,
+          companyNameAr: customer.companyNameAr,
+          vatNumber: customer.vatNumber,
+          address: customer.address,
+          addressAr: customer.addressAr,
+          city: customer.city,
+          country: customer.country,
+        };
+      } else {
+        customerId = null;
+      }
+    }
+
+    return tx.invoice.create({
+      data: {
+        businessId,
+        customerId,
+        invoiceNumber,
+        invoiceType: source.invoiceType,
+        status: "DRAFT",
+        issueDate: new Date(today),
+        dueDate: new Date(today),
+        currencyCode: updatedBusiness.currencyCode,
+        languageMode: updatedBusiness.defaultLanguageMode,
+        notes: source.notes,
+        customerSnapshot: customerSnapshot ?? {},
+        businessSnapshot,
+        subtotal: calculated.subtotal,
+        discountAmount: calculated.discountAmount,
+        vatAmount: calculated.vatAmount,
+        totalAmount: calculated.totalAmount,
+        qrCodeData,
+        amountInWordsEn: amountWords.en,
+        amountInWordsAr: amountWords.ar,
+        items: { create: itemsData },
+      },
+    });
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath("/dashboard");
+  return { status: "success", invoiceId: created.id, invoiceNumber: created.invoiceNumber };
+}

@@ -115,6 +115,7 @@ export interface InvoiceDraftLineItem {
 export interface InvoiceDraftForEdit {
   id: string;
   invoiceNumber: string;
+  status: InvoiceStatus;
   invoiceType: InvoiceType;
   issueDate: string;
   dueDate: string;
@@ -128,7 +129,6 @@ export type InvoiceEditResult =
   | { status: "no-organization" }
   | { status: "not-found" }
   | { status: "invoice-not-found" }
-  | { status: "not-draft"; invoiceNumber: string; currentStatus: InvoiceStatus }
   | { status: "ok"; context: InvoiceBuilderContext; invoice: InvoiceDraftForEdit };
 
 function toDateInputValue(date: Date): string {
@@ -137,7 +137,10 @@ function toDateInputValue(date: Date): string {
 
 // Scoped to the current business the same way every other reader is —
 // requesting another tenant's invoice id simply finds no row, same as a
-// forged customerId in the Customer milestone.
+// forged customerId in the Customer milestone. Returns invoices of any
+// status now (not just DRAFT) — the builder itself decides what's
+// editable based on `invoice.status`, since a sent/paid/cancelled invoice
+// is still viewable/printable, just read-only.
 export async function getInvoiceForEdit(invoiceId: string): Promise<InvoiceEditResult> {
   const current = await getCurrentBusiness();
   if (current.status !== "ok") return current;
@@ -147,9 +150,6 @@ export async function getInvoiceForEdit(invoiceId: string): Promise<InvoiceEditR
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   if (!invoice) return { status: "invoice-not-found" };
-  if (invoice.status !== "DRAFT") {
-    return { status: "not-draft", invoiceNumber: invoice.invoiceNumber, currentStatus: invoice.status };
-  }
 
   const customers = await getCustomerOptions(current.business.id);
 
@@ -159,6 +159,7 @@ export async function getInvoiceForEdit(invoiceId: string): Promise<InvoiceEditR
     invoice: {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      status: invoice.status,
       invoiceType: invoice.invoiceType,
       issueDate: toDateInputValue(invoice.issueDate),
       dueDate: toDateInputValue(invoice.dueDate),

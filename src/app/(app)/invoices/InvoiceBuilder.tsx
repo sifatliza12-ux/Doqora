@@ -1,26 +1,39 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 import type { InvoiceType } from "@prisma/client";
+import type { BadgeStatus } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FormSection } from "@/components/ui/FormSection";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
+import { TrashIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import { amountToWords } from "@/lib/amount-in-words";
 import { calculateInvoice } from "@/lib/invoice-calculations";
 import { buildInvoiceQrPayload } from "@/lib/invoice-qr";
-import { saveInvoiceDraft } from "@/server/invoice-actions";
+import {
+  cancelInvoice,
+  markInvoicePaid,
+  markInvoiceSent,
+  saveInvoiceDraft,
+} from "@/server/invoice-actions";
 import type { InvoiceBuilderContext, InvoiceDraftForEdit } from "@/server/invoices";
+import { DeleteInvoiceModal } from "./DeleteInvoiceModal";
 import { DownloadPdfButton } from "./DownloadPdfButton";
+import { DuplicateInvoiceButton } from "./DuplicateInvoiceButton";
 import { InvoiceSheetPreview } from "./InvoiceSheetPreview";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { makeEmptyLineItem, type LineItemDraft } from "./line-item-draft";
 
 type MobileView = "edit" | "preview";
 type SaveState = { status: "idle" | "success" | "error"; message?: string };
+type StatusAction = "sent" | "paid" | "cancel";
+type StatusActionState = { action: StatusAction | null; error: string | null };
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -34,6 +47,13 @@ export function InvoiceBuilder({
   invoice?: InvoiceDraftForEdit;
 }) {
   const { business, bankAccount, customers } = context;
+  const router = useRouter();
+
+  // Once an invoice leaves DRAFT it's a finalized document — no more
+  // editing customer/line items/dates (Stage 0's snapshot-immutability
+  // principle). A brand-new, not-yet-saved invoice (no `invoice` prop)
+  // is always editable, since it has no status yet.
+  const isEditable = !invoice || invoice.status === "DRAFT";
 
   const [mobileView, setMobileView] = useState<MobileView>("edit");
   const [customerId, setCustomerId] = useState(invoice?.customerId ?? "");
@@ -59,6 +79,13 @@ export function InvoiceBuilder({
 
   const [isPending, startTransition] = useTransition();
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+
+  const [isStatusPending, startStatusTransition] = useTransition();
+  const [statusActionState, setStatusActionState] = useState<StatusActionState>({
+    action: null,
+    error: null,
+  });
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const calculated = useMemo(() => calculateInvoice(lineItems), [lineItems]);
 
@@ -138,11 +165,33 @@ export function InvoiceBuilder({
     });
   }
 
+  function handleStatusAction(action: StatusAction) {
+    if (!invoice) return;
+    setStatusActionState({ action, error: null });
+    startStatusTransition(async () => {
+      const runner = action === "sent" ? markInvoiceSent : action === "paid" ? markInvoicePaid : cancelInvoice;
+      const result = await runner(invoice.id);
+      if (result.status === "success") {
+        setStatusActionState({ action: null, error: null });
+        // revalidatePath (in the server action) refreshes this route's
+        // server data automatically, but the router.refresh() here makes
+        // that explicit rather than relying on it implicitly, so the
+        // badge/read-only state update immediately, not on next navigation.
+        router.refresh();
+      } else {
+        setStatusActionState({ action: null, error: result.message });
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-lg font-semibold text-foreground">
-        {invoice ? `Edit invoice ${invoice.invoiceNumber}` : "New invoice"}
-      </h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-lg font-semibold text-foreground">
+          {invoice ? `Invoice ${invoice.invoiceNumber}` : "New invoice"}
+        </h1>
+        {invoice && <Badge status={invoice.status.toLowerCase() as BadgeStatus} />}
+      </div>
 
       {/* Mobile-only Edit/Preview pill toggle */}
       <div className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-surface p-1 md:hidden">
@@ -177,18 +226,66 @@ export function InvoiceBuilder({
       <div className="flex flex-col gap-6 md:flex-row md:items-start">
         <div className={cn("md:w-5/12", mobileView === "edit" ? "block" : "hidden", "md:block")}>
           <div className="flex flex-col gap-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <Button type="button" onClick={handleSave} disabled={isPending}>
-                {isPending ? "Saving…" : "Save Draft"}
-              </Button>
-              {invoice && (
-                <DownloadPdfButton invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} />
-              )}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {isEditable && (
+                  <Button type="button" onClick={handleSave} disabled={isPending}>
+                    {isPending ? "Saving…" : "Save Draft"}
+                  </Button>
+                )}
+                {invoice?.status === "DRAFT" && (
+                  <Button
+                    type="button"
+                    onClick={() => handleStatusAction("sent")}
+                    disabled={isStatusPending}
+                  >
+                    {isStatusPending && statusActionState.action === "sent"
+                      ? "Marking as sent…"
+                      : "Mark as Sent"}
+                  </Button>
+                )}
+                {invoice?.status === "SENT" && (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={() => handleStatusAction("paid")}
+                      disabled={isStatusPending}
+                    >
+                      {isStatusPending && statusActionState.action === "paid"
+                        ? "Marking as paid…"
+                        : "Mark as Paid"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => handleStatusAction("cancel")}
+                      disabled={isStatusPending}
+                    >
+                      {isStatusPending && statusActionState.action === "cancel"
+                        ? "Cancelling…"
+                        : "Cancel"}
+                    </Button>
+                  </>
+                )}
+                {invoice && (
+                  <DownloadPdfButton invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} />
+                )}
+                {invoice && <DuplicateInvoiceButton invoiceId={invoice.id} />}
+                {invoice?.status === "DRAFT" && (
+                  <Button type="button" variant="danger" onClick={() => setIsDeleteModalOpen(true)}>
+                    <TrashIcon className="h-4 w-4" />
+                    Delete
+                  </Button>
+                )}
+              </div>
               {saveState.status === "success" && (
                 <p className="text-sm text-success">{saveState.message}</p>
               )}
               {saveState.status === "error" && (
                 <p className="text-sm text-danger">{saveState.message}</p>
+              )}
+              {statusActionState.error && (
+                <p className="text-sm text-danger">{statusActionState.error}</p>
               )}
             </div>
 
@@ -244,6 +341,7 @@ export function InvoiceBuilder({
                     value={customerId}
                     onChange={(event) => setCustomerId(event.target.value)}
                     required
+                    disabled={!isEditable}
                   >
                     <option value="">Select a customer</option>
                     {customers.map((customer) => (
@@ -252,7 +350,7 @@ export function InvoiceBuilder({
                       </option>
                     ))}
                   </Select>
-                  {!customerId && invoice?.customerSnapshotName && (
+                  {isEditable && !customerId && invoice?.customerSnapshotName && (
                     <p className="text-sm text-muted-foreground">
                       Previously linked to &ldquo;{invoice.customerSnapshotName}&rdquo;, who has
                       since been deleted. Pick a customer to relink this draft.
@@ -269,6 +367,7 @@ export function InvoiceBuilder({
                   label="Type"
                   value={invoiceType}
                   onChange={(event) => setInvoiceType(event.target.value as InvoiceType)}
+                  disabled={!isEditable}
                 >
                   <option value="TAX_INVOICE">Tax Invoice</option>
                   <option value="STANDARD">Standard</option>
@@ -279,6 +378,7 @@ export function InvoiceBuilder({
                   type="date"
                   value={issueDate}
                   onChange={(event) => setIssueDate(event.target.value)}
+                  disabled={!isEditable}
                   required
                 />
                 <Input
@@ -286,6 +386,7 @@ export function InvoiceBuilder({
                   type="date"
                   value={dueDate}
                   onChange={(event) => setDueDate(event.target.value)}
+                  disabled={!isEditable}
                   required
                 />
               </div>
@@ -298,6 +399,7 @@ export function InvoiceBuilder({
                 onChange={updateLineItem}
                 onAdd={addLineItem}
                 onRemove={removeLineItem}
+                disabled={!isEditable}
               />
             </FormSection>
 
@@ -321,6 +423,7 @@ export function InvoiceBuilder({
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
                 placeholder="Add any notes for this invoice…"
+                disabled={!isEditable}
               />
             </FormSection>
           </div>
@@ -342,6 +445,12 @@ export function InvoiceBuilder({
           />
         </div>
       </div>
+
+      <DeleteInvoiceModal
+        invoice={isDeleteModalOpen && invoice ? invoice : null}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onDeleted={() => router.push("/invoices")}
+      />
     </div>
   );
 }

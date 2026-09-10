@@ -58,19 +58,16 @@ export default async function EditInvoicePage({
     );
   }
 
-  if (result.status === "not-draft") {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{result.invoiceNumber} is no longer a draft</CardTitle>
-          <CardDescription>
-            This invoice is {result.currentStatus.toLowerCase()} and can&apos;t be edited here.
-            Editing sent or finalized invoices comes in a later milestone.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  return <InvoiceBuilder key={result.invoice.id} context={result.context} invoice={result.invoice} />;
+  // Keying on status too (not just id) forces a remount on every status
+  // transition, discarding any in-progress-but-unsaved form edits rather
+  // than leaving them visible-but-disabled after the invoice becomes
+  // read-only — status actions never touch content server-side, so the
+  // fresh mount always reflects the actually-saved data.
+  return (
+    <InvoiceBuilder
+      key={`${result.invoice.id}-${result.invoice.status}`}
+      context={result.context}
+      invoice={result.invoice}
+    />
+  );
 }
