@@ -43,12 +43,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // more deterministic in every environment, dev or deployed.
     await page.goto(printUrl.toString(), { waitUntil: "load" });
     // The QR code renders async (see InvoiceQrCode.tsx) — wait for its
-    // <svg> explicitly rather than assuming it's already there, plus web
-    // fonts (Inter/Noto Sans Arabic) finishing before printing.
+    // <svg> explicitly rather than assuming it's already there.
     await page
       .waitForFunction(() => document.querySelector("svg") !== null, { timeout: 5000 })
       .catch(() => {});
-    await page.evaluate(() => document.fonts.ready);
+    // `document.fonts.ready` alone isn't a reliable signal that a given
+    // @font-face has actually finished loading: it resolves once whatever
+    // has been *requested so far* has settled, including vacuously (zero
+    // pending loads) if layout hadn't triggered the request yet, and it
+    // resolves on load *failure* too, not just success. That gap is what
+    // previously let a production PDF ship with neither Inter nor Noto
+    // Sans Arabic actually embedded (only sparticuz/chromium's own bundled
+    // fallback font). document.fonts.load() forces the request for each
+    // family with real sample text (Arabic included, since subsetted web
+    // fonts can be requested per unicode-range) and rejects on genuine
+    // failure instead of swallowing it.
+    await page.evaluate(async () => {
+      await Promise.all([
+        document.fonts.load('16px "Inter"', "Invoice 0123456789"),
+        document.fonts.load('16px "Noto Sans Arabic"', "فاتورة ضريبية"),
+      ]);
+      await document.fonts.ready;
+    });
 
     const pdfBuffer = await page.pdf({
       format: "A4",

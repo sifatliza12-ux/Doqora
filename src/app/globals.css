@@ -73,6 +73,17 @@ html {
   color-scheme: dark;
 }
 
+/* Every dir="rtl" element in this app is Arabic text (see
+   InvoiceSheetPreview.tsx) — Inter (font-sans) has no Arabic glyphs, so
+   without this these fall through to a generic sans-serif and rely on
+   the OS having some Arabic-capable font installed. That's true on a
+   normal desktop but not on the sandboxed Linux serverless runtime
+   Chromium runs in for PDF export, which has nothing beyond a bundled
+   Latin-only fallback font — hence missing-glyph boxes there specifically. */
+[dir="rtl"] {
+  font-family: var(--font-arabic);
+}
+
 body {
   background: var(--color-background);
   color: var(--color-foreground);
