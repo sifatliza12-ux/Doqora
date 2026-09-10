@@ -11,13 +11,14 @@
   "dependencies": {
     "@clerk/nextjs": "^7.9.1",
     "@prisma/client": "^6.19.3",
-    "@react-pdf/renderer": "^4.9.0",
+    "@sparticuz/chromium": "^152.0.0",
     "@tanstack/react-query": "^5.102.8",
     "@vercel/blob": "^2.8.0",
     "@vercel/postgres": "^0.10.0",
     "decimal.js": "^10.6.0",
     "n2words": "^6.1.2",
     "next": "16.3.4",
+    "puppeteer-core": "^25.10.0",
     "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -31,11 +32,15 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "prisma": "^6.19.3",
+    "puppeteer": "^25.10.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "allowScripts": {
+    "puppeteer@25.10.0": true
   }
 }

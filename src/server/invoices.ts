@@ -1,6 +1,10 @@
 import type { Business, BusinessBankAccount, InvoiceStatus, InvoiceType } from "@prisma/client";
+import { amountToWords, type AmountInWords } from "@/lib/amount-in-words";
+import type { CalculatedInvoice } from "@/lib/invoice-calculations";
+import { buildInvoiceQrPayload } from "@/lib/invoice-qr";
 import { prisma } from "@/lib/prisma";
 import { getCurrentBusiness } from "@/server/business";
+import type { LineItemDraft } from "@/app/(app)/invoices/line-item-draft";
 
 function customerNameFromSnapshot(snapshot: unknown): string {
   if (snapshot && typeof snapshot === "object" && "name" in snapshot) {
@@ -171,6 +175,125 @@ export async function getInvoiceForEdit(invoiceId: string): Promise<InvoiceEditR
         discount: item.discount.toString(),
         vatRate: item.vatRate.toString(),
       })),
+    },
+  };
+}
+
+function customerDisplayFromSnapshot(snapshot: unknown): { name: string; nameAr: string } {
+  const record = snapshot && typeof snapshot === "object" ? (snapshot as Record<string, unknown>) : {};
+  const str = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v : undefined);
+  return {
+    name: str(record.companyName) ?? str(record.name) ?? "—",
+    nameAr: str(record.companyNameAr) ?? str(record.nameAr) ?? "",
+  };
+}
+
+export interface InvoiceForPrint {
+  business: Business;
+  bankAccount: BusinessBankAccount | null;
+  customerName: string;
+  customerNameAr: string;
+  invoiceNumber: string;
+  invoiceType: InvoiceType;
+  issueDate: string;
+  dueDate: string;
+  lineItems: LineItemDraft[];
+  calculated: CalculatedInvoice;
+  qrPayload: string;
+  amountInWords: AmountInWords;
+}
+
+export type InvoiceForPrintResult =
+  | { status: "not-found" }
+  | { status: "ok"; invoice: InvoiceForPrint };
+
+// Used only by the internal /print/invoice/[id] page, which headless
+// Chromium navigates to and which has no Clerk session of its own —
+// `businessId` here is never client-supplied; it comes from a signed
+// print-token minted by an already-authenticated caller (see
+// src/lib/print-token.ts). Renders from the invoice's own STORED
+// snapshot/totals/amountInWords/qrCodeData (immutable at save time),
+// matching what was actually true when the invoice was saved — not
+// recomputed from the current, possibly-since-changed line items. Business
+// name/VAT/CR and bank details are still read live, same as the on-screen
+// builder/preview already does (those aren't snapshotted on Invoice at all).
+export async function getInvoiceForPrint(invoiceId: string, businessId: string): Promise<InvoiceForPrintResult> {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, businessId },
+    include: { items: { orderBy: { sortOrder: "asc" } }, business: { include: { bankAccounts: true } } },
+  });
+  if (!invoice) return { status: "not-found" };
+
+  const { business: businessWithAccounts } = invoice;
+  const { bankAccounts, ...business } = businessWithAccounts;
+  const bankAccount = bankAccounts.find((account) => account.isDefault) ?? bankAccounts[0] ?? null;
+
+  const { name: customerName, nameAr: customerNameAr } = customerDisplayFromSnapshot(invoice.customerSnapshot);
+
+  const lineItems: LineItemDraft[] = invoice.items.map((item) => ({
+    key: item.id,
+    description: item.description,
+    descriptionAr: item.descriptionAr ?? "",
+    quantity: item.quantity.toString(),
+    unit: item.unit ?? "",
+    rate: item.rate.toString(),
+    discount: item.discount.toString(),
+    vatRate: item.vatRate.toString(),
+  }));
+
+  // Built directly from each item's own stored columns, not recalculated —
+  // `amount` is the one exception, since it isn't its own stored column
+  // (only vatAmount/lineTotal are); it's cheap and lossless to re-derive
+  // (quantity × rate) and InvoiceSheetPreview doesn't render it anyway.
+  const calculated: CalculatedInvoice = {
+    lines: invoice.items.map((item) => ({
+      quantity: item.quantity,
+      rate: item.rate,
+      discount: item.discount,
+      vatRate: item.vatRate,
+      amount: item.quantity.times(item.rate),
+      vatAmount: item.vatAmount,
+      lineTotal: item.lineTotal,
+    })),
+    subtotal: invoice.subtotal,
+    discountAmount: invoice.discountAmount,
+    vatAmount: invoice.vatAmount,
+    totalAmount: invoice.totalAmount,
+  };
+
+  // Both fields have been populated at save time since the QR/amount-in-
+  // words milestones landed — this fallback only matters for rows saved
+  // before that (e.g. seed data), so a pre-existing invoice can still be
+  // printed correctly instead of showing blank/stale content.
+  const qrPayload =
+    invoice.qrCodeData ??
+    buildInvoiceQrPayload({
+      invoiceNumber: invoice.invoiceNumber,
+      businessName: business.name,
+      totalAmount: invoice.totalAmount,
+      vatAmount: invoice.vatAmount,
+      issueDate: toDateInputValue(invoice.issueDate),
+    });
+  const amountInWords: AmountInWords =
+    invoice.amountInWordsEn && invoice.amountInWordsAr
+      ? { en: invoice.amountInWordsEn, ar: invoice.amountInWordsAr }
+      : amountToWords(invoice.totalAmount, invoice.currencyCode);
+
+  return {
+    status: "ok",
+    invoice: {
+      business,
+      bankAccount,
+      customerName,
+      customerNameAr,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceType: invoice.invoiceType,
+      issueDate: toDateInputValue(invoice.issueDate),
+      dueDate: toDateInputValue(invoice.dueDate),
+      lineItems,
+      calculated,
+      qrPayload,
+      amountInWords,
     },
   };
 }

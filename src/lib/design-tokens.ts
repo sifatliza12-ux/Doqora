@@ -5,9 +5,10 @@
  * defined in `src/app/globals.css` (@theme block). Tailwind v4 has no
  * built-in mechanism to generate one from the other.
  *
- * Why this file exists: @react-pdf/renderer cannot consume Tailwind
- * classes or CSS variables — it needs raw JS values passed directly to its
- * StyleSheet API. These are the values used for invoice PDF rendering.
+ * Why this file exists: Clerk's `appearance.variables` API (see
+ * clerk-appearance.ts) takes plain JS values, not Tailwind classes or CSS
+ * custom properties, so Clerk-rendered components (SignIn, SignUp, etc.)
+ * can be themed to match the app.
  */
 
 export const colors = {

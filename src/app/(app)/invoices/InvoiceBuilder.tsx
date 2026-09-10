@@ -14,6 +14,7 @@ import { calculateInvoice } from "@/lib/invoice-calculations";
 import { buildInvoiceQrPayload } from "@/lib/invoice-qr";
 import { saveInvoiceDraft } from "@/server/invoice-actions";
 import type { InvoiceBuilderContext, InvoiceDraftForEdit } from "@/server/invoices";
+import { DownloadPdfButton } from "./DownloadPdfButton";
 import { InvoiceSheetPreview } from "./InvoiceSheetPreview";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { makeEmptyLineItem, type LineItemDraft } from "./line-item-draft";
@@ -176,10 +177,13 @@ export function InvoiceBuilder({
       <div className="flex flex-col gap-6 md:flex-row md:items-start">
         <div className={cn("md:w-5/12", mobileView === "edit" ? "block" : "hidden", "md:block")}>
           <div className="flex flex-col gap-6">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Button type="button" onClick={handleSave} disabled={isPending}>
                 {isPending ? "Saving…" : "Save Draft"}
               </Button>
+              {invoice && (
+                <DownloadPdfButton invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} />
+              )}
               {saveState.status === "success" && (
                 <p className="text-sm text-success">{saveState.message}</p>
               )}

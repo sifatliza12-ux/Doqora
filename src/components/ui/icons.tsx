@@ -106,3 +106,20 @@ export function TrashIcon(props: SVGProps<SVGSVGElement>) {
     </IconBase>
   );
 }
+
+export function DownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 3v12M12 15l-4.5-4.5M12 15l4.5-4.5" />
+      <path d="M4.5 16.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2.5" />
+    </IconBase>
+  );
+}
+
+export function SpinnerIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props} className={`animate-spin ${props.className ?? ""}`}>
+      <path d="M12 3a9 9 0 1 0 9 9" />
+    </IconBase>
+  );
+}
