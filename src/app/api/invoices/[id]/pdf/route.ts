@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createPrintToken } from "@/lib/print-token";
 import { launchBrowser } from "@/lib/launch-browser";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getCurrentBusiness } from "@/server/business";
 import { getInvoiceForPrint } from "@/server/invoices";
 
@@ -8,6 +9,15 @@ export const runtime = "nodejs";
 // Generous headroom for a cold Chromium launch (2-5s observed) plus page
 // render + print; well under Vercel's 300s default.
 export const maxDuration = 60;
+
+// Each request launches a full headless Chromium instance — meaningfully
+// expensive compared to a normal request. Keyed by businessId (derived from
+// the session below, never client-supplied) rather than IP, since IP is
+// unreliable behind Vercel's proxy and businessId is the identity that
+// actually matters here. See src/lib/rate-limit.ts for the in-memory
+// implementation's limitations.
+const PDF_RATE_LIMIT = 10;
+const PDF_RATE_LIMIT_WINDOW_MS = 60_000;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,6 +28,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const current = await getCurrentBusiness();
   if (current.status !== "ok") {
     return new Response("Not authorized.", { status: 401 });
+  }
+
+  const rateLimit = checkRateLimit(`pdf:${current.business.id}`, PDF_RATE_LIMIT, PDF_RATE_LIMIT_WINDOW_MS);
+  if (!rateLimit.allowed) {
+    return new Response("Too many PDF requests. Please wait a moment and try again.", {
+      status: 429,
+      headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+    });
   }
 
   const result = await getInvoiceForPrint(id, current.business.id);
