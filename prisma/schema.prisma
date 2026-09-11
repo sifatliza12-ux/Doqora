@@ -31,6 +31,7 @@ enum InvoiceType {
   TAX_INVOICE
   STANDARD
   PROFORMA
+  QUOTATION
 }
 
 enum InvoiceStatus {
@@ -73,6 +74,11 @@ model Business {
   currencyCode          String       @default("SAR")
   invoicePrefix         String       @default("INV-")
   nextInvoiceNumber     Int          @default(1)
+  // Quotations draw from an entirely separate sequence — never the real
+  // invoice numbering — assigned atomically at save time exactly like
+  // invoicePrefix/nextInvoiceNumber above (see saveInvoiceDraft).
+  quotePrefix           String       @default("QUO-")
+  nextQuoteNumber       Int          @default(1)
   defaultLanguageMode   LanguageMode @default(BILINGUAL)
   defaultTemplate       String       @default("saudi-bilingual")
   // Null until the first-run onboarding modal is dismissed (saved or
@@ -177,6 +183,16 @@ model Invoice {
   amountInWordsEn String?
   amountInWordsAr String?
   qrCodeData      String? @db.Text
+
+  // Set only on a QUOTATION row once it's been converted — points at the
+  // brand-new TAX_INVOICE created by convertQuoteToInvoice(). Nullable
+  // self-relation rather than a separate join table: a quote converts to
+  // at most one invoice, ever (the @unique also stops two quotes from ever
+  // claiming the same invoice). Presence of this field is what blocks a
+  // second conversion of the same quote.
+  convertedToInvoiceId String?  @unique
+  convertedToInvoice   Invoice? @relation("QuoteConversion", fields: [convertedToInvoiceId], references: [id])
+  convertedFromQuote   Invoice? @relation("QuoteConversion")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -53,6 +53,10 @@ export async function getTaxReportData(from: Date, to: Date): Promise<TaxReportR
     businessId,
     status: { in: TAXABLE_STATUSES },
     issueDate: { gte: from, lt: to },
+    // A quotation is never a real tax event, regardless of its status —
+    // this is what actually keeps a SENT quote out of VAT owed, not the
+    // status filter above (which a quote can also satisfy).
+    invoiceType: { not: "QUOTATION" as const },
   };
 
   const [aggregate, rows] = await Promise.all([

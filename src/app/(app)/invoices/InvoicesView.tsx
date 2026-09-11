@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import type { InvoiceStatus } from "@prisma/client";
+import type { InvoiceStatus, InvoiceType } from "@prisma/client";
 import type { BadgeStatus } from "@/components/ui/Badge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +43,10 @@ function statusToBadge(status: InvoiceStatus): BadgeStatus {
   return status.toLowerCase() as BadgeStatus;
 }
 
+function isQuotation(type: InvoiceType): boolean {
+  return type === "QUOTATION";
+}
+
 const STATUS_OPTIONS: { value: "all" | InvoiceStatus; label: string }[] = [
   { value: "all", label: "All statuses" },
   { value: "DRAFT", label: "Draft" },
@@ -52,10 +56,17 @@ const STATUS_OPTIONS: { value: "all" | InvoiceStatus; label: string }[] = [
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
+const TYPE_OPTIONS: { value: "all" | "invoice" | "quotation"; label: string }[] = [
+  { value: "all", label: "All types" },
+  { value: "invoice", label: "Invoices" },
+  { value: "quotation", label: "Quotations" },
+];
+
 export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | InvoiceStatus>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "invoice" | "quotation">("all");
   const [deletingInvoice, setDeletingInvoice] = useState<InvoiceListRow | null>(null);
 
   const filteredInvoices = useMemo(() => {
@@ -66,15 +77,29 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
         invoice.invoiceNumber.toLowerCase().includes(query) ||
         invoice.customerName.toLowerCase().includes(query);
       const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
-      return matchesQuery && matchesStatus;
+      const matchesType =
+        typeFilter === "all" || (typeFilter === "quotation") === isQuotation(invoice.invoiceType);
+      return matchesQuery && matchesStatus && matchesType;
     });
-  }, [invoices, search, statusFilter]);
+  }, [invoices, search, statusFilter, typeFilter]);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-lg font-semibold text-foreground">Invoices</h1>
         <div className="flex flex-wrap items-center gap-2">
+          <Select
+            aria-label="Filter by type"
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value as "all" | "invoice" | "quotation")}
+            className="w-36"
+          >
+            {TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
           <Select
             aria-label="Filter by status"
             value={statusFilter}
@@ -94,6 +119,12 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
             onChange={(event) => setSearch(event.target.value)}
             className="w-56"
           />
+          <Link href="/invoices/new?type=QUOTATION">
+            <Button variant="secondary">
+              <PlusIcon className="h-4 w-4" />
+              New Quote
+            </Button>
+          </Link>
           <Link href="/invoices/new">
             <Button variant="primary">
               <PlusIcon className="h-4 w-4" />
@@ -123,6 +154,7 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
           <TableHeader>
             <TableRow>
               <TableHead className="whitespace-nowrap">Invoice #</TableHead>
+              <TableHead className="whitespace-nowrap">Type</TableHead>
               <TableHead className="whitespace-nowrap">Customer</TableHead>
               <TableHead numeric className="whitespace-nowrap">
                 Amount
@@ -137,7 +169,7 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
           <TableBody>
             {filteredInvoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   No invoices match your search.
                 </TableCell>
               </TableRow>
@@ -150,6 +182,9 @@ export function InvoicesView({ invoices }: { invoices: InvoiceListRow[] }) {
                 >
                   <TableCell className="whitespace-nowrap font-medium">
                     {invoice.invoiceNumber}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {isQuotation(invoice.invoiceType) ? "Quotation" : "Invoice"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {invoice.customerName}

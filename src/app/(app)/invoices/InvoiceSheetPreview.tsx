@@ -2,6 +2,7 @@ import type { Business, BusinessBankAccount, InvoiceType } from "@prisma/client"
 import { InvoiceSheet } from "@/components/ui/InvoiceSheet";
 import type { AmountInWords } from "@/lib/amount-in-words";
 import type { CalculatedInvoice } from "@/lib/invoice-calculations";
+import { cn } from "@/lib/utils";
 import { InvoiceQrCode } from "./InvoiceQrCode";
 import type { LineItemDraft } from "./line-item-draft";
 
@@ -9,6 +10,7 @@ const INVOICE_TYPE_LABELS: Record<InvoiceType, { en: string; ar: string }> = {
   TAX_INVOICE: { en: "Tax invoice", ar: "فاتورة ضريبية" },
   STANDARD: { en: "Invoice", ar: "فاتورة" },
   PROFORMA: { en: "Proforma invoice", ar: "فاتورة مبدئية" },
+  QUOTATION: { en: "Quotation", ar: "عرض سعر" },
 };
 
 function SectionDivider() {
@@ -236,9 +238,16 @@ export function InvoiceSheetPreview({
 
       <SectionDivider />
 
-      {/* Footer: bank details + QR code */}
+      {/* Footer: bank details + QR code. QR is a ZATCA tax-document
+          requirement (see invoice-qr.ts) — not applicable to a quotation,
+          so it's omitted entirely rather than shown empty/disabled. */}
       <div className="p-8">
-        <div className="grid grid-cols-1 gap-6 rounded-sheet border border-sheet-border p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-6 rounded-sheet border border-sheet-border p-4",
+            invoiceType !== "QUOTATION" && "sm:grid-cols-[1fr_auto] sm:items-center"
+          )}
+        >
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium text-sheet-heading">
               Bank details / <span dir="rtl">تفاصيل الحساب البنكي</span>
@@ -254,10 +263,12 @@ export function InvoiceSheetPreview({
               <p className="text-sheet-muted-foreground">No bank account on file.</p>
             )}
           </div>
-          <InvoiceQrCode
-            data={qrPayload}
-            className="h-20 w-20 self-center border border-sheet-border sm:justify-self-end"
-          />
+          {invoiceType !== "QUOTATION" && (
+            <InvoiceQrCode
+              data={qrPayload}
+              className="h-20 w-20 self-center border border-sheet-border sm:justify-self-end"
+            />
+          )}
         </div>
       </div>
     </InvoiceSheet>

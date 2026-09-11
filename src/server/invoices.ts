@@ -17,6 +17,7 @@ function customerNameFromSnapshot(snapshot: unknown): string {
 export interface InvoiceListRow {
   id: string;
   invoiceNumber: string;
+  invoiceType: InvoiceType;
   customerName: string;
   totalAmount: number;
   status: InvoiceStatus;
@@ -39,6 +40,7 @@ export async function getInvoicesForCurrentBusiness(): Promise<InvoicesListResul
     select: {
       id: true,
       invoiceNumber: true,
+      invoiceType: true,
       totalAmount: true,
       status: true,
       issueDate: true,
@@ -52,6 +54,7 @@ export async function getInvoicesForCurrentBusiness(): Promise<InvoicesListResul
     invoices: rows.map((row) => ({
       id: row.id,
       invoiceNumber: row.invoiceNumber,
+      invoiceType: row.invoiceType,
       customerName: customerNameFromSnapshot(row.customerSnapshot),
       totalAmount: row.totalAmount.toNumber(),
       status: row.status,
@@ -123,6 +126,9 @@ export interface InvoiceDraftForEdit {
   customerId: string | null;
   customerSnapshotName: string | null;
   items: InvoiceDraftLineItem[];
+  /** Set only for a QUOTATION that's already been converted — the resulting
+   * invoice, for the "already converted" audit-trail link in the builder. */
+  convertedToInvoice: { id: string; invoiceNumber: string } | null;
 }
 
 export type InvoiceEditResult =
@@ -147,7 +153,10 @@ export async function getInvoiceForEdit(invoiceId: string): Promise<InvoiceEditR
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, businessId: current.business.id },
-    include: { items: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      items: { orderBy: { sortOrder: "asc" } },
+      convertedToInvoice: { select: { id: true, invoiceNumber: true } },
+    },
   });
   if (!invoice) return { status: "invoice-not-found" };
 
@@ -166,6 +175,7 @@ export async function getInvoiceForEdit(invoiceId: string): Promise<InvoiceEditR
       notes: invoice.notes ?? "",
       customerId: invoice.customerId,
       customerSnapshotName: invoice.customerId ? null : customerNameFromSnapshot(invoice.customerSnapshot),
+      convertedToInvoice: invoice.convertedToInvoice,
       items: invoice.items.map((item) => ({
         id: item.id,
         description: item.description,

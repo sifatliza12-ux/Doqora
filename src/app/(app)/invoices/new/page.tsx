@@ -7,7 +7,12 @@ export const metadata = {
   title: "New invoice — Doqora",
 };
 
-export default async function NewInvoicePage() {
+export default async function NewInvoicePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
+  const { type } = await searchParams;
   const result = await getInvoiceBuilderContext();
 
   if (result.status === "no-organization") {
@@ -44,5 +49,10 @@ export default async function NewInvoicePage() {
     );
   }
 
-  return <InvoiceBuilder context={result.context} />;
+  return (
+    <InvoiceBuilder
+      context={result.context}
+      initialInvoiceType={type === "QUOTATION" ? "QUOTATION" : undefined}
+    />
+  );
 }

@@ -40,20 +40,25 @@ export async function getDashboardData(): Promise<DashboardResult> {
   if (current.status !== "ok") return current;
 
   const businessId = current.business.id;
+  // A quotation is not a real sale — SENT/PAID-shaped numbers on a
+  // QUOTATION would otherwise get silently counted as actual revenue,
+  // outstanding balance, or shown in "recent invoices". Every query below
+  // that reports on business performance excludes it explicitly.
+  const excludeQuotations = { invoiceType: { not: "QUOTATION" as const } };
 
   const [revenueAgg, outstandingAgg, paidCount, overdueCount, recentInvoices] = await Promise.all([
     prisma.invoice.aggregate({
-      where: { businessId, status: "PAID" },
+      where: { businessId, status: "PAID", ...excludeQuotations },
       _sum: { totalAmount: true },
     }),
     prisma.invoice.aggregate({
-      where: { businessId, status: { in: ["SENT", "OVERDUE"] } },
+      where: { businessId, status: { in: ["SENT", "OVERDUE"] }, ...excludeQuotations },
       _sum: { totalAmount: true },
     }),
-    prisma.invoice.count({ where: { businessId, status: "PAID" } }),
-    prisma.invoice.count({ where: { businessId, status: "OVERDUE" } }),
+    prisma.invoice.count({ where: { businessId, status: "PAID", ...excludeQuotations } }),
+    prisma.invoice.count({ where: { businessId, status: "OVERDUE", ...excludeQuotations } }),
     prisma.invoice.findMany({
-      where: { businessId },
+      where: { businessId, ...excludeQuotations },
       orderBy: { issueDate: "desc" },
       take: 5,
       select: { id: true, invoiceNumber: true, totalAmount: true, status: true, customerSnapshot: true },

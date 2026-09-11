@@ -24,6 +24,7 @@ import {
   type SaveInvoiceDraftInput,
 } from "@/server/invoice-actions";
 import type { InvoiceBuilderContext, InvoiceDraftForEdit } from "@/server/invoices";
+import { ConvertToInvoiceButton } from "./ConvertToInvoiceButton";
 import { DeleteInvoiceModal } from "./DeleteInvoiceModal";
 import { DownloadPdfButton } from "./DownloadPdfButton";
 import { DuplicateInvoiceButton } from "./DuplicateInvoiceButton";
@@ -58,9 +59,14 @@ function formatSavedAgo(savedAt: number | null): string {
 export function InvoiceBuilder({
   context,
   invoice,
+  initialInvoiceType,
 }: {
   context: InvoiceBuilderContext;
   invoice?: InvoiceDraftForEdit;
+  /** Only consulted for a brand-new document (no `invoice` prop) — lets the
+   * "New Quote" entry point land on a builder pre-set to QUOTATION instead
+   * of the default TAX_INVOICE. */
+  initialInvoiceType?: InvoiceType;
 }) {
   const { business, bankAccount, customers } = context;
   const router = useRouter();
@@ -73,7 +79,16 @@ export function InvoiceBuilder({
 
   const [mobileView, setMobileView] = useState<MobileView>("edit");
   const [customerId, setCustomerId] = useState(invoice?.customerId ?? "");
-  const [invoiceType, setInvoiceType] = useState<InvoiceType>(invoice?.invoiceType ?? "TAX_INVOICE");
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(
+    invoice?.invoiceType ?? initialInvoiceType ?? "TAX_INVOICE"
+  );
+  // Once a document has a real assigned number, its type can only be
+  // changed within the SAME numbering family (quotation vs. the three real
+  // invoice types) — otherwise switching Type on a saved Draft would leave
+  // e.g. a QUO- numbered row typed as a real invoice. A brand-new,
+  // not-yet-saved document has no number yet, so all four options are open.
+  const isExistingQuotation = invoice?.invoiceType === "QUOTATION";
+  const isExistingRealInvoiceType = Boolean(invoice) && invoice?.invoiceType !== "QUOTATION";
   const [issueDate, setIssueDate] = useState(invoice?.issueDate ?? todayIso());
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? todayIso());
   const [notes, setNotes] = useState(invoice?.notes ?? "");
@@ -137,9 +152,14 @@ export function InvoiceBuilder({
     "Select a customer";
   const customerDisplayNameAr = selectedCustomer?.companyNameAr || selectedCustomer?.nameAr || "";
 
+  // A quotation draws its preview number from the separate quote sequence —
+  // matching saveInvoiceDraft's own branch, so this preview never shows a
+  // number that save would then actually assign from the other sequence.
   const invoiceNumberPreview = invoice
     ? invoice.invoiceNumber
-    : `${business.invoicePrefix}${business.nextInvoiceNumber}`;
+    : invoiceType === "QUOTATION"
+      ? `${business.quotePrefix}${business.nextQuoteNumber}`
+      : `${business.invoicePrefix}${business.nextInvoiceNumber}`;
 
   // Always regenerated live from current form state — same treatment as
   // subtotal/vatAmount/totalAmount above, so the QR can never show data
@@ -363,7 +383,11 @@ export function InvoiceBuilder({
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
         <h1 className="text-lg font-semibold text-foreground">
-          {invoice ? `Invoice ${invoice.invoiceNumber}` : "New invoice"}
+          {invoice
+            ? `${invoice.invoiceType === "QUOTATION" ? "Quotation" : "Invoice"} ${invoice.invoiceNumber}`
+            : invoiceType === "QUOTATION"
+              ? "New quotation"
+              : "New invoice"}
         </h1>
         {invoice && <Badge status={invoice.status.toLowerCase() as BadgeStatus} />}
       </div>
@@ -421,15 +445,20 @@ export function InvoiceBuilder({
                 )}
                 {invoice?.status === "SENT" && (
                   <>
-                    <Button
-                      type="button"
-                      onClick={() => handleStatusAction("paid")}
-                      disabled={isStatusPending}
-                    >
-                      {isStatusPending && statusActionState.action === "paid"
-                        ? "Marking as paid…"
-                        : "Mark as Paid"}
-                    </Button>
+                    {/* Quotations only use Draft/Sent for this pass — no
+                        Paid/Overdue — so this stays hidden for one. Cancel
+                        still applies generically either way. */}
+                    {invoice.invoiceType !== "QUOTATION" && (
+                      <Button
+                        type="button"
+                        onClick={() => handleStatusAction("paid")}
+                        disabled={isStatusPending}
+                      >
+                        {isStatusPending && statusActionState.action === "paid"
+                          ? "Marking as paid…"
+                          : "Mark as Paid"}
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="secondary"
@@ -446,13 +475,27 @@ export function InvoiceBuilder({
                   <DownloadPdfButton invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} />
                 )}
                 {invoice && <DuplicateInvoiceButton invoiceId={invoice.id} />}
-                {invoice?.status === "DRAFT" && (
+                {invoice?.invoiceType === "QUOTATION" &&
+                  !invoice.convertedToInvoice &&
+                  invoice.status !== "CANCELLED" && <ConvertToInvoiceButton quoteId={invoice.id} />}
+                {invoice?.status === "DRAFT" && !invoice.convertedToInvoice && (
                   <Button type="button" variant="danger" onClick={() => setIsDeleteModalOpen(true)}>
                     <TrashIcon className="h-4 w-4" />
                     Delete
                   </Button>
                 )}
               </div>
+              {invoice?.convertedToInvoice && (
+                <p className="text-sm text-muted-foreground">
+                  Converted to invoice{" "}
+                  <Link
+                    href={`/invoices/${invoice.convertedToInvoice.id}`}
+                    className="font-medium text-emerald hover:underline"
+                  >
+                    {invoice.convertedToInvoice.invoiceNumber}
+                  </Link>
+                </p>
+              )}
               {saveStatus === "saving" && (
                 <p className="text-sm text-muted-foreground">Saving…</p>
               )}
@@ -547,9 +590,14 @@ export function InvoiceBuilder({
                   onChange={(event) => setInvoiceType(event.target.value as InvoiceType)}
                   disabled={!isEditable}
                 >
-                  <option value="TAX_INVOICE">Tax Invoice</option>
-                  <option value="STANDARD">Standard</option>
-                  <option value="PROFORMA">Proforma</option>
+                  {!isExistingRealInvoiceType && <option value="QUOTATION">Quotation</option>}
+                  {!isExistingQuotation && (
+                    <>
+                      <option value="TAX_INVOICE">Tax Invoice</option>
+                      <option value="STANDARD">Standard</option>
+                      <option value="PROFORMA">Proforma</option>
+                    </>
+                  )}
                 </Select>
                 <Input
                   label="Issue date"
