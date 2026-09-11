@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { InvoiceType } from "@prisma/client";
 import type { BadgeStatus } from "@/components/ui/Badge";
 import { Badge } from "@/components/ui/Badge";
@@ -21,6 +21,7 @@ import {
   markInvoicePaid,
   markInvoiceSent,
   saveInvoiceDraft,
+  type SaveInvoiceDraftInput,
 } from "@/server/invoice-actions";
 import type { InvoiceBuilderContext, InvoiceDraftForEdit } from "@/server/invoices";
 import { DeleteInvoiceModal } from "./DeleteInvoiceModal";
@@ -31,12 +32,27 @@ import { LineItemsEditor } from "./LineItemsEditor";
 import { makeEmptyLineItem, type LineItemDraft } from "./line-item-draft";
 
 type MobileView = "edit" | "preview";
-type SaveState = { status: "idle" | "success" | "error"; message?: string };
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 type StatusAction = "sent" | "paid" | "cancel";
 type StatusActionState = { action: StatusAction | null; error: string | null };
 
+// Not on every keystroke (would hammer the DB) and not so long it feels
+// unresponsive — a short pause in editing is the signal that a "change"
+// is actually finished, not still mid-keystroke.
+const AUTOSAVE_DEBOUNCE_MS = 1800;
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function formatSavedAgo(savedAt: number | null): string {
+  if (savedAt === null) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+  if (seconds < 5) return "Saved just now";
+  if (seconds < 60) return `Saved ${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `Saved ${minutes}m ago`;
+  return `Saved ${Math.floor(minutes / 60)}h ago`;
 }
 
 export function InvoiceBuilder({
@@ -77,8 +93,32 @@ export function InvoiceBuilder({
   );
   const newLineCounter = useRef(0);
 
+  // Once there's a persisted DRAFT to autosave, not before: a brand-new,
+  // not-yet-created invoice is deliberately excluded (see performSave's
+  // comment below on why) — the manual Save Draft button still creates it,
+  // same as before this milestone.
+  const canAutosave = invoice?.status === "DRAFT";
+
   const [isPending, startTransition] = useTransition();
-  const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+
+  const isSavingRef = useRef(false);
+  const pendingResaveRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Loading an already-saved draft shouldn't itself count as an "edit" —
+  // only actual changes made after that should schedule an autosave.
+  const skipNextAutosaveRef = useRef(true);
+
+  // Ticks once a second while "saved" so "Saved Xs ago" advances live,
+  // without needing a state update from anything but this timer itself.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (saveStatus !== "saved") return;
+    const id = setInterval(() => forceTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [saveStatus]);
 
   const [isStatusPending, startStatusTransition] = useTransition();
   const [statusActionState, setStatusActionState] = useState<StatusActionState>({
@@ -137,33 +177,168 @@ export function InvoiceBuilder({
     setLineItems((prev) => prev.filter((item) => item.key !== key));
   }
 
-  function handleSave() {
-    setSaveState({ status: "idle" });
+  function buildSavePayload(): SaveInvoiceDraftInput {
+    return {
+      invoiceId: invoice?.id,
+      customerId,
+      invoiceType,
+      issueDate,
+      dueDate,
+      notes,
+      lineItems: lineItems.map((item) => ({
+        description: item.description,
+        descriptionAr: item.descriptionAr,
+        quantity: item.quantity,
+        unit: item.unit,
+        rate: item.rate,
+        discount: item.discount,
+        vatRate: item.vatRate,
+      })),
+    };
+  }
+
+  // Mirrors the server's own minimum-viable-draft check (customer selected,
+  // at least one real line item). Only consulted by the *autosave* path —
+  // an explicit manual click always attempts the save and surfaces
+  // whatever the server says, same as before this milestone. Autosave
+  // skips silently instead: a customer briefly deselected or a line item
+  // mid-replacement is normal, expected editing state, not a failure the
+  // user needs to be alarmed about.
+  function hasSavableContent(): boolean {
+    return Boolean(customerId) && lineItems.some((item) => item.description.trim() || Number(item.quantity) > 0 || Number(item.rate) > 0);
+  }
+
+  // The one place that actually calls the server action. Guards against
+  // overlapping requests for the same invoice: if a save is already in
+  // flight when this fires again (an edit landed mid-request, the
+  // debounce timer fired again, etc.), it doesn't start a second
+  // concurrent request — it marks that another save is owed and lets the
+  // in-flight one's completion handler re-run this with fresh state,
+  // which naturally coalesces any number of edits that happened in the
+  // meantime into a single follow-up save.
+  function performSave(options: { skipIfIncomplete?: boolean } = {}) {
+    if (options.skipIfIncomplete && !hasSavableContent()) return;
+    if (isSavingRef.current) {
+      pendingResaveRef.current = true;
+      return;
+    }
+    isSavingRef.current = true;
+    setSaveStatus("saving");
+    setSaveError(null);
+    const payload = buildSavePayload();
     startTransition(async () => {
-      const result = await saveInvoiceDraft({
-        invoiceId: invoice?.id,
-        customerId,
-        invoiceType,
-        issueDate,
-        dueDate,
-        notes,
-        lineItems: lineItems.map((item) => ({
-          description: item.description,
-          descriptionAr: item.descriptionAr,
-          quantity: item.quantity,
-          unit: item.unit,
-          rate: item.rate,
-          discount: item.discount,
-          vatRate: item.vatRate,
-        })),
-      });
-      if (result.status === "success") {
-        setSaveState({ status: "success", message: `Saved as ${result.invoiceNumber}.` });
-      } else {
-        setSaveState({ status: "error", message: result.message });
+      try {
+        const result = await saveInvoiceDraft(payload);
+        isSavingRef.current = false;
+        if (result.status === "success") {
+          setSaveStatus("saved");
+          setLastSavedAt(Date.now());
+        } else {
+          setSaveStatus("error");
+          setSaveError(result.message);
+        }
+      } catch {
+        // A thrown network/server error, not a { status: "error" } result —
+        // without this, isSavingRef would stay true forever and silently
+        // block every future save attempt (each one just marking itself
+        // pending, never actually retrying).
+        isSavingRef.current = false;
+        setSaveStatus("error");
+        setSaveError("Couldn't reach the server. Check your connection and try again.");
+      }
+      if (pendingResaveRef.current) {
+        pendingResaveRef.current = false;
+        performSave({ skipIfIncomplete: true });
       }
     });
   }
+
+  function handleManualSave() {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    performSave();
+  }
+
+  // Debounce timers and the unmount-flush below need the *current*
+  // render's performSave (closing over the latest field values) without
+  // re-triggering every render — listing performSave itself as an effect
+  // dependency would reset the debounce on every unrelated re-render
+  // (e.g. the "Saved Xs ago" ticker above). Keeping it in a ref updated
+  // after every render sidesteps that while still always calling the
+  // freshest version.
+  const performSaveRef = useRef(performSave);
+  useEffect(() => {
+    performSaveRef.current = performSave;
+  });
+
+  // Marks the initial mount as settled, deliberately decoupled from the
+  // debounce effect below rather than mutated inline there. React Strict
+  // Mode's dev-only double-invoke (mount -> cleanup -> mount again, all
+  // synchronous, no real time passing) would otherwise consume a simple
+  // "skip once" flag on its throwaway first pass, leaving the second
+  // ("real") pass to wrongly treat itself as a genuine edit and schedule a
+  // spurious save of unchanged data. Deferring to a fresh tick means both
+  // synchronous Strict Mode passes still see the flag as true — only a
+  // change made after mount has actually settled flips it.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      skipNextAutosaveRef.current = false;
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Debounced autosave: any change to an editable field while this is a
+  // saved Draft schedules a save after a pause in editing. Intentionally
+  // excludes a brand-new, not-yet-created invoice — saveInvoiceDraft's
+  // create branch redirects to the new invoice's URL, and an automatic
+  // mid-typing redirect would be jarring in a way a deliberate button
+  // click isn't; the manual Save Draft button still creates it as before.
+  useEffect(() => {
+    if (!canAutosave) return;
+    if (skipNextAutosaveRef.current) return;
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      performSaveRef.current({ skipIfIncomplete: true });
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [canAutosave, customerId, invoiceType, issueDate, dueDate, notes, lineItems]);
+
+  // If the user navigates away (in-app) while a debounced save hasn't
+  // fired yet, flush it immediately rather than losing the edit — the
+  // request still completes in the background even as this component
+  // unmounts, since it isn't tied to the React tree.
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+        performSaveRef.current({ skipIfIncomplete: true });
+      }
+    };
+  }, []);
+
+  // A true tab close / hard navigation can't be guaranteed to let an
+  // in-flight or about-to-fire save finish, so warn instead of silently
+  // losing it — the standard pattern for this, rather than attempting a
+  // best-effort background save via sendBeacon (which can't carry this
+  // app's Server Action request shape anyway).
+  useEffect(() => {
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      const hasUnflushedChanges =
+        debounceTimerRef.current !== null || pendingResaveRef.current || saveStatus === "error";
+      if (hasUnflushedChanges) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [saveStatus]);
 
   function handleStatusAction(action: StatusAction) {
     if (!invoice) return;
@@ -229,7 +404,7 @@ export function InvoiceBuilder({
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 {isEditable && (
-                  <Button type="button" onClick={handleSave} disabled={isPending}>
+                  <Button type="button" onClick={handleManualSave} disabled={isPending}>
                     {isPending ? "Saving…" : "Save Draft"}
                   </Button>
                 )}
@@ -278,11 +453,14 @@ export function InvoiceBuilder({
                   </Button>
                 )}
               </div>
-              {saveState.status === "success" && (
-                <p className="text-sm text-success">{saveState.message}</p>
+              {saveStatus === "saving" && (
+                <p className="text-sm text-muted-foreground">Saving…</p>
               )}
-              {saveState.status === "error" && (
-                <p className="text-sm text-danger">{saveState.message}</p>
+              {saveStatus === "saved" && (
+                <p className="text-sm text-muted-foreground">{formatSavedAgo(lastSavedAt)}</p>
+              )}
+              {saveStatus === "error" && (
+                <p className="text-sm text-danger">Not saved: {saveError}</p>
               )}
               {statusActionState.error && (
                 <p className="text-sm text-danger">{statusActionState.error}</p>
