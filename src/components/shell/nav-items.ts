@@ -4,6 +4,7 @@ import {
   DashboardIcon,
   InvoicesIcon,
   SettingsIcon,
+  TaxReportIcon,
 } from "@/components/ui/icons";
 
 export interface NavItem {
@@ -16,5 +17,6 @@ export const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
   { label: "Customers", href: "/customers", icon: CustomersIcon },
   { label: "Invoices", href: "/invoices", icon: InvoicesIcon },
+  { label: "Tax Report", href: "/tax-report", icon: TaxReportIcon },
   { label: "Settings", href: "/settings", icon: SettingsIcon },
 ];

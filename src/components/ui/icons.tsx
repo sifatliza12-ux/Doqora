@@ -55,6 +55,16 @@ export function SettingsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function TaxReportIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="M6 2.75h8.5L19 7.25V21a.75.75 0 0 1-.75.75H6a.75.75 0 0 1-.75-.75V3.5A.75.75 0 0 1 6 2.75Z" />
+      <path d="M14.5 2.75V7a.75.75 0 0 0 .75.75H19" />
+      <path d="M9 17.5 15 11.5M9.75 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM14.25 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" />
+    </IconBase>
+  );
+}
+
 export function MenuIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <IconBase {...props}>
