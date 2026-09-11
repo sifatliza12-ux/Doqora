@@ -49,11 +49,31 @@ export async function updateBusinessProfile(
       invoicePrefix: String(formData.get("invoicePrefix") ?? "").trim() || "INV-",
       currencyCode: String(formData.get("currencyCode") ?? "").trim() || "SAR",
       defaultLanguageMode,
+      // A save through this action — whether from the full Settings form or
+      // the first-run onboarding modal (a thin wrapper around the same
+      // action) — always counts as the business having engaged with its
+      // profile, so the onboarding modal never needs to show again either
+      // way. See dismissOnboarding() below for the other half (Skip).
+      onboardingDismissedAt: new Date(),
     },
   });
 
   revalidatePath("/settings");
+  revalidatePath("/dashboard");
   return { status: "success", message: "Business profile saved." };
+}
+
+// Records that the first-run onboarding modal was dismissed WITHOUT saving
+// (the "Skip for now" path, and closing the modal any other way — backdrop
+// click, Escape). Intentionally separate from updateBusinessProfile: it
+// touches none of the profile fields, only the dismissal marker.
+export async function dismissOnboarding(): Promise<void> {
+  const businessId = await requireCurrentBusinessId();
+  await prisma.business.update({
+    where: { id: businessId },
+    data: { onboardingDismissedAt: new Date() },
+  });
+  revalidatePath("/dashboard");
 }
 
 export type BankDetailsState = { status: "idle" | "success" | "error"; message?: string };

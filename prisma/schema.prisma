@@ -53,30 +53,37 @@ model User {
 }
 
 model Business {
-  id                  String       @id @default(cuid())
-  clerkOrgId          String?      @unique
-  name                String
-  nameAr              String?
-  address             String?
-  addressAr           String?
-  city                String?
-  country             String?
-  phone               String?
-  email               String?
-  website             String?
-  crNumber            String?
-  vatNumber           String?
-  businessActivity    String?
-  logoUrl             String?
-  brandColorPrimary   String       @default("#10B981")
-  brandColorAccent    String       @default("#C58B3A")
-  currencyCode        String       @default("SAR")
-  invoicePrefix       String       @default("INV-")
-  nextInvoiceNumber   Int          @default(1)
-  defaultLanguageMode LanguageMode @default(BILINGUAL)
-  defaultTemplate     String       @default("saudi-bilingual")
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  id                    String       @id @default(cuid())
+  clerkOrgId            String?      @unique
+  name                  String
+  nameAr                String?
+  address               String?
+  addressAr             String?
+  city                  String?
+  country               String?
+  phone                 String?
+  email                 String?
+  website               String?
+  crNumber              String?
+  vatNumber             String?
+  businessActivity      String?
+  logoUrl               String?
+  brandColorPrimary     String       @default("#10B981")
+  brandColorAccent      String       @default("#C58B3A")
+  currencyCode          String       @default("SAR")
+  invoicePrefix         String       @default("INV-")
+  nextInvoiceNumber     Int          @default(1)
+  defaultLanguageMode   LanguageMode @default(BILINGUAL)
+  defaultTemplate       String       @default("saudi-bilingual")
+  // Null until the first-run onboarding modal is dismissed (saved or
+  // skipped) — see updateBusinessProfile/dismissOnboarding in
+  // business-actions.ts, the only two writers. Reused as the modal's
+  // "don't show again" signal; a save through the full Settings form
+  // also sets it, so a business that fills in its profile there before
+  // ever seeing the modal is correctly never nagged either.
+  onboardingDismissedAt DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
   members      BusinessMember[]
   customers    Customer[]
