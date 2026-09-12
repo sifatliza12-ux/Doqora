@@ -14,8 +14,8 @@ export const maxDuration = 60;
 // expensive compared to a normal request. Keyed by businessId (derived from
 // the session below, never client-supplied) rather than IP, since IP is
 // unreliable behind Vercel's proxy and businessId is the identity that
-// actually matters here. See src/lib/rate-limit.ts for the in-memory
-// implementation's limitations.
+// actually matters here. See src/lib/rate-limit.ts for the distributed
+// (Redis-backed) implementation and its fail-open reasoning.
 const PDF_RATE_LIMIT = 10;
 const PDF_RATE_LIMIT_WINDOW_MS = 60_000;
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response("Not authorized.", { status: 401 });
   }
 
-  const rateLimit = checkRateLimit(`pdf:${current.business.id}`, PDF_RATE_LIMIT, PDF_RATE_LIMIT_WINDOW_MS);
+  const rateLimit = await checkRateLimit(`pdf:${current.business.id}`, PDF_RATE_LIMIT, PDF_RATE_LIMIT_WINDOW_MS);
   if (!rateLimit.allowed) {
     return new Response("Too many PDF requests. Please wait a moment and try again.", {
       status: 429,
