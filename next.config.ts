@@ -54,17 +54,29 @@ function clerkFrontendApiOrigin(): string | null {
 // than "add a CSP header" for a first Report-Only pass. Worth reconsidering
 // specifically if/when this moves to enforcing mode and the app's rendering
 // model is being touched anyway; not introduced silently here.
+// Cloudflare Turnstile (challenges.cloudflare.com) is Clerk's bot-protection
+// widget for account CREATION specifically — it only loads once a sign-up is
+// actually submitted, not on page load, which is exactly why two full
+// Report-Only rounds (page-load checks only) never surfaced it: it took a
+// real, completed sign-up submission under enforcing mode to trigger the
+// script load and get caught. Needs script-src, connect-src, AND frame-src
+// per Cloudflare's own CSP guide (developers.cloudflare.com/turnstile/
+// reference/content-security-policy) — confirmed against that guide, not
+// guessed, once the violation's exact blocked URL pointed at it.
+const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
+
 function buildCspHeaderValue(): string {
   const clerkOrigin = clerkFrontendApiOrigin();
+  const frameSources = [clerkOrigin ?? "'self'", TURNSTILE_ORIGIN].join(" ");
   const clerkPart = clerkOrigin ? ` ${clerkOrigin}` : "";
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${clerkPart}`,
+    `script-src 'self' 'unsafe-inline'${clerkPart} ${TURNSTILE_ORIGIN}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: https://img.clerk.com`,
     "font-src 'self'",
-    `connect-src 'self'${clerkPart}`,
-    `frame-src${clerkPart || " 'none'"}`,
+    `connect-src 'self'${clerkPart} ${TURNSTILE_ORIGIN}`,
+    `frame-src ${frameSources}`,
     // Clerk's SDK spins up a Web Worker from a blob: URL on every single
     // page load (observed consistently, twice per page, across every flow
     // tested — sign-in/up included, before any interactive auth action) —
