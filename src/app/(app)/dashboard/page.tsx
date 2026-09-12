@@ -3,7 +3,7 @@ import type { BadgeStatus } from "@/components/ui/Badge";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { getCurrentBusiness } from "@/server/business";
+import { getCurrentBusiness, isCurrentUserOwner } from "@/server/business";
 import { type DashboardRecentInvoice, getDashboardData } from "@/server/dashboard";
 import { OnboardingModal } from "./OnboardingModal";
 
@@ -23,7 +23,11 @@ function statusToBadge(status: DashboardRecentInvoice["status"]): BadgeStatus {
 }
 
 export default async function DashboardPage() {
-  const [result, currentBusiness] = await Promise.all([getDashboardData(), getCurrentBusiness()]);
+  const [result, currentBusiness, isOwner] = await Promise.all([
+    getDashboardData(),
+    getCurrentBusiness(),
+    isCurrentUserOwner(),
+  ]);
 
   if (result.status === "no-organization") {
     return (
@@ -75,9 +79,13 @@ export default async function DashboardPage() {
   // both things a real business fills in during actual setup, so both being
   // empty is a reliable sign Settings has never been visited. Gated on
   // onboardingDismissedAt so a Skip (which leaves the profile empty on
-  // purpose) doesn't re-trigger the modal on the next login.
+  // purpose) doesn't re-trigger the modal on the next login. Also gated on
+  // isOwner — the modal's Save action is updateBusinessProfile itself, which
+  // only an OWNER can actually submit; prompting a MEMBER to fill in fields
+  // they'd just get rejected on isn't useful, so only the owner gets nudged.
   const showOnboarding =
     currentBusiness.status === "ok" &&
+    isOwner &&
     !currentBusiness.business.onboardingDismissedAt &&
     !currentBusiness.business.address &&
     !currentBusiness.business.crNumber;

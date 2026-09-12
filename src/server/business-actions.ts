@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { LanguageMode } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireCurrentBusinessId } from "@/server/business";
+import { isCurrentUserOwner, requireCurrentBusinessId } from "@/server/business";
 
 const LANGUAGE_MODES: LanguageMode[] = ["ENGLISH", "ARABIC", "BILINGUAL"];
 function isLanguageMode(value: string): value is LanguageMode {
@@ -22,6 +22,9 @@ export async function updateBusinessProfile(
   formData: FormData
 ): Promise<BusinessProfileState> {
   const businessId = await requireCurrentBusinessId();
+  if (!(await isCurrentUserOwner())) {
+    return { status: "error", message: "Only the business owner can edit the business profile." };
+  }
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) {
@@ -83,6 +86,9 @@ export async function updateBankAccount(
   formData: FormData
 ): Promise<BankDetailsState> {
   const businessId = await requireCurrentBusinessId();
+  if (!(await isCurrentUserOwner())) {
+    return { status: "error", message: "Only the business owner can edit bank details." };
+  }
 
   const bankName = String(formData.get("bankName") ?? "").trim();
   const accountName = String(formData.get("accountName") ?? "").trim();

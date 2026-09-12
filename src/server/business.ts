@@ -43,3 +43,17 @@ export async function requireCurrentBusinessId(): Promise<string> {
 
   return business.id;
 }
+
+// The one OWNER-vs-MEMBER boundary this app enforces: company-wide settings
+// (Business Profile, Bank Details) are OWNER-only, everything else (customers,
+// invoices, quotes) is open to any member. Reads Clerk's own live orgRole
+// claim from the session (default roles "org:admin"/"org:member") rather than
+// the BusinessMember.role column — that column is only a point-in-time
+// snapshot written at membership-creation time (see webhooks/clerk.ts) and
+// would go stale the moment a role changes later via Clerk's own
+// OrganizationProfile UI, since no organizationMembership.updated handler
+// exists (deliberately — this live check makes one unnecessary).
+export async function isCurrentUserOwner(): Promise<boolean> {
+  const { orgRole } = await auth();
+  return orgRole === "org:admin";
+}

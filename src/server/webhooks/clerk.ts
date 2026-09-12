@@ -47,7 +47,7 @@ export async function syncClerkWebhookEvent(event: WebhookEvent): Promise<void> 
     }
 
     case "organizationMembership.created": {
-      const { organization, public_user_data } = event.data;
+      const { organization, public_user_data, role } = event.data;
 
       const [user, business] = await Promise.all([
         prisma.user.findUnique({ where: { clerkUserId: public_user_data.user_id } }),
@@ -68,7 +68,14 @@ export async function syncClerkWebhookEvent(event: WebhookEvent): Promise<void> 
           data: {
             userId: user.id,
             businessId: business.id,
-            role: public_user_data.user_id === organization.created_by ? "OWNER" : "MEMBER",
+            // Clerk's own assigned role at membership-creation time (default
+            // roles "org:admin"/"org:member") — NOT "are you the org
+            // creator", which is wrong the moment the creator invites someone
+            // else in as an admin too. The live equivalent of this check
+            // (auth().orgRole, see requireOwnerRole() in business.ts) is what
+            // actually gates OWNER-only actions; this column is a
+            // point-in-time snapshot for display purposes only.
+            role: role === "org:admin" ? "OWNER" : "MEMBER",
           },
         });
       } catch (error) {
