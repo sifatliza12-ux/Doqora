@@ -23,8 +23,11 @@ function clerkFrontendApiOrigin(): string | null {
   }
 }
 
-// Report-Only pass — deliberately not enforcing yet (see the security pass
-// this defers from). Built entirely from origins actually observed loading
+// Enforcing CSP — ran clean (0 violations) for two full rounds in
+// Report-Only mode against real production traffic across every flow below
+// before this switched from Content-Security-Policy-Report-Only to
+// Content-Security-Policy; see git history for that Report-Only pass and
+// its worker-src fix. Built entirely from origins actually observed loading
 // across every real flow (sign-in, sign-up, dashboard, customers, settings/
 // Team's <OrganizationProfile />, invoice builder, PDF download): Clerk's
 // own Frontend API domain for script/connect/frame, img.clerk.com for
@@ -98,11 +101,10 @@ const nextConfig: NextConfig = {
     // character class and silently never matches this route.
     "/api/invoices/\\[id\\]/pdf": ["./node_modules/@sparticuz/chromium/bin/**/*"],
   },
-  // Baseline hardening headers, plus a Report-Only CSP (see
-  // buildCspHeaderValue() above) — Report-Only so nothing can actually break:
-  // violations are only reported to the browser console, never blocked.
-  // Switching to a real, enforcing Content-Security-Policy is a deliberate
-  // separate follow-up once Report-Only has run clean across every flow.
+  // Baseline hardening headers, plus an enforcing CSP (see
+  // buildCspHeaderValue() above) — now actually blocking, not just
+  // reporting, after two clean (0-violation) Report-Only rounds against
+  // real production traffic across every flow.
   //
   // Set directly here (next.config.ts) rather than in proxy.ts (this
   // version's renamed middleware.ts — see AGENTS.md): the value needs no
@@ -118,7 +120,7 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          { key: "Content-Security-Policy-Report-Only", value: buildCspHeaderValue() },
+          { key: "Content-Security-Policy", value: buildCspHeaderValue() },
         ],
       },
     ];
