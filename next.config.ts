@@ -35,6 +35,15 @@ function clerkFrontendApiOrigin(): string | null {
 // Vercel Analytics/Speed Insights are not enabled and nothing in this
 // codebase references them, so no origin needed for those either.
 //
+// worker-src (below) came from the FIRST deployed Report-Only pass, not
+// this initial network-request survey — a blob: Worker isn't a normal
+// `request` Puppeteer's Network domain attributes to Clerk's own origin
+// (its embedded blob: URL resolves to whatever page created it, i.e. this
+// app's own origin), so it never showed up as a "foreign" origin to spot by
+// inspection. Report-Only mode caught it immediately once deployed: real
+// securitypolicyviolation events fired on every single page. That's
+// exactly the failure mode Report-Only exists to catch before enforcing.
+//
 // script-src/style-src use 'unsafe-inline' rather than a nonce: Next.js's
 // own inline hydration scripts need one or the other, and a nonce-based CSP
 // requires opting every single page into dynamic rendering app-wide (per
@@ -53,6 +62,12 @@ function buildCspHeaderValue(): string {
     "font-src 'self'",
     `connect-src 'self'${clerkPart}`,
     `frame-src${clerkPart || " 'none'"}`,
+    // Clerk's SDK spins up a Web Worker from a blob: URL on every single
+    // page load (observed consistently, twice per page, across every flow
+    // tested — sign-in/up included, before any interactive auth action) —
+    // not covered by default-src 'self', since worker-src doesn't inherit
+    // the blob: scheme from a same-origin default.
+    "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
