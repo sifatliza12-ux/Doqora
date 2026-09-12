@@ -34,6 +34,16 @@
 //      — noun, so it gets the bare singular rather than the
 //      accusative-tanwin form the 11-99 tamyiz case correctly uses. See
 //      arabicUnitPhrase()'s "lastTwoDigits === 0" branch.
+//
+//   4. Construct-state duals (200, 2000, 1200, 2200, ...): n2words emits
+//      the scale word مائة/ألف's dual as its independent form (مئتان/
+//      ألفان). But per (3) above, that scale word is mudaf (construct) to
+//      the following counted noun — and a dual noun in construct state
+//      drops its ن regardless of case (مائتان -> مائتا, ألفان -> ألفا),
+//      the same way a sound plural does. Only the scale word immediately
+//      adjacent to the counted noun is mudaf to it (an earlier ...وألفان
+//      segment in a compound like 2200 is merely coordinated, not itself
+//      mudaf, and keeps its ن) — see toConstructStateDual() below.
 import { Decimal } from "decimal.js";
 import { toCardinal as arCardinal } from "n2words/ar-SA";
 import { toCardinal as enCardinal } from "n2words/en";
@@ -63,6 +73,19 @@ function fixArabicOrthography(words: string): string {
 }
 
 /**
+ * Drops the ن from a dual scale word (مائتان -> مائتا, ألفان -> ألفا) when
+ * it directly precedes — and is therefore mudaf (construct) to — the
+ * counted noun. Only matches at the END of the number-words string, since
+ * that's the one word actually adjacent to the noun; an earlier
+ * "...ألفان و..." segment in a compound number (e.g. 2200 -> "ألفان
+ * ومائتان") is joined by wa- as a coordinated, independent number, not
+ * mudaf, and correctly keeps its ن.
+ */
+function toConstructStateDual(numberWords: string): string {
+  return numberWords.replace(/(مائتان|ألفان)$/, (match) => (match === "مائتان" ? "مائتا" : "ألفا"));
+}
+
+/**
  * Renders a single currency-unit count ("283110" riyals, or "68" halalas)
  * as an Arabic noun phrase with the grammatically correct noun form.
  *
@@ -85,11 +108,21 @@ function arabicUnitPhrase(
   forms: ArabicNounForms,
   nounTrueGender: "masculine" | "feminine"
 ): string {
-  // Zero is left as accusative (forms[3]) deliberately: unlike the
-  // round-hundred/thousand case below, there's no confirmed reference
-  // example either way for "zero X" — low-confidence, low-stakes, not
-  // worth guessing at further.
-  if (count === 0) return `${AR_ZERO} ${forms[3]}`;
+  // Zero uses the same bare/genitive noun (forms[0]) as the round-hundred/
+  // thousand case above, not the 11-99 tamyiz accusative (forms[3]).
+  // Reasoning (no locked reference example either way, unlike the
+  // round-hundred/thousand fix — this is a judgment call, not a confirmed
+  // fact): the accusative-tanwin tamyiz form exists specifically to
+  // disambiguate the 11-99 compound cardinals, which is a classical-Arabic
+  // rule for that specific numeral class. "صفر" was never part of that
+  // classical numeral system (zero as a counting number is a modern
+  // addition) — structurally it's an invariant singular quantity-noun with
+  // no compound ones/tens morphology, the same shape as مائة/ألف, not the
+  // shape of an 11-99 number. By that structural analogy it takes the same
+  // idafa (construct) treatment as those: "صفر ريال", not "صفر ريالاً".
+  // This also matches the far more common real-world register (financial/
+  // legal Arabic reads "الرصيد صفر ريال", not "...صفر ريالاً").
+  if (count === 0) return `${AR_ZERO} ${forms[0]}`;
   if (count === 1) {
     return `${forms[0]} ${nounTrueGender === "feminine" ? AR_ONE_FEMININE : AR_ONE_MASCULINE}`;
   }
@@ -108,8 +141,11 @@ function arabicUnitPhrase(
     // the 11-99 case below. The second noun in an idafa is genitive, and
     // genitive indefinite nouns don't take the accusative-marking
     // tanwin+alif, so this reuses the bare singular (forms[0], same word
-    // used for the count=1 idiom's noun half) rather than forms[3].
-    return `${numberWords} ${forms[0]}`;
+    // used for the count=1 idiom's noun half) rather than forms[3]. When
+    // that scale word is itself dual (200, 2000, ...), the same
+    // construct-state relationship additionally strips its ن — see
+    // toConstructStateDual().
+    return `${toConstructStateDual(numberWords)} ${forms[0]}`;
   }
   return `${numberWords} ${forms[3]}`; // 11-99: singular accusative (tamyiz)
 }
