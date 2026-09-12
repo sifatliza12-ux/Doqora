@@ -61,6 +61,20 @@ type ArabicNounForms = [string, string, string, string];
 const AR_RIAL_FORMS: ArabicNounForms = ["ريال", "ريالان", "ريالات", "ريالاً"];
 const AR_HALALA_FORMS: ArabicNounForms = ["هللة", "هللتان", "هللات", "هللة"];
 
+// AED forms — researched independently, not assumed from SAR's pattern (see
+// CURRENCY_WORDS.AED below for full sourcing). درهم (dirham) is masculine
+// and takes a genuine broken plural (دراهم), unlike ريال's sound masculine
+// plural (ريالات) — both still slot into the same forms[2]/"3-10" position
+// since Arabic's numeral-agreement rule cares about the noun's role in that
+// slot, not which pluralization pattern fills it. فلس (fils) is masculine
+// (unlike هللة, which is feminine) — its count=1 idiom is "فلس واحد", not
+// "فلسة واحدة" — and takes the classical paucal plural أفلس for 3-10,
+// distinct from the plural-of-abundance فلوس used for 11+ in ordinary
+// (non-tamyiz) contexts; forms[2] here is specifically the 3-10 slot, which
+// is exactly what the paucal plural is for.
+const AR_DIRHAM_FORMS: ArabicNounForms = ["درهم", "درهمان", "دراهم", "درهماً"];
+const AR_FILS_FORMS: ArabicNounForms = ["فلس", "فلسان", "أفلس", "فلساً"];
+
 const AR_ZERO = "صفر";
 const AR_ONE_MASCULINE = "واحد";
 const AR_ONE_FEMININE = "واحدة";
@@ -150,13 +164,20 @@ function arabicUnitPhrase(
   return `${numberWords} ${forms[3]}`; // 11-99: singular accusative (tamyiz)
 }
 
-function arabicAmountToWords(major: number, minor: number): string {
+function arabicAmountToWords(
+  major: number,
+  minor: number,
+  majorForms: ArabicNounForms,
+  majorGender: "masculine" | "feminine",
+  minorForms: ArabicNounForms,
+  minorGender: "masculine" | "feminine"
+): string {
   const parts: string[] = [];
   if (major > 0 || minor === 0) {
-    parts.push(arabicUnitPhrase(major, AR_RIAL_FORMS, "masculine"));
+    parts.push(arabicUnitPhrase(major, majorForms, majorGender));
   }
   if (minor > 0) {
-    parts.push(arabicUnitPhrase(minor, AR_HALALA_FORMS, "feminine"));
+    parts.push(arabicUnitPhrase(minor, minorForms, minorGender));
   }
   return `${parts.join(" و")}.`;
 }
@@ -181,21 +202,29 @@ interface CurrencyWords {
   minorNames: [singular: string, plural: string];
   arabic?: {
     majorForms: ArabicNounForms;
+    majorGender: "masculine" | "feminine";
     minorForms: ArabicNounForms;
+    minorGender: "masculine" | "feminine";
   };
 }
 
-// SAR gets full linguistic rigor (verified against the project's locked
-// ground truth). Other currencies are best-effort English pluralization
-// only — genuinely correct Arabic noun agreement for each would need the
-// same per-currency verification SAR just got, which is out of scope here.
+// SAR and AED get full linguistic rigor (each independently verified — SAR
+// against the project's locked ground truth, AED against real UAE usage —
+// see AR_DIRHAM_FORMS/AR_FILS_FORMS above). Other currencies are best-effort
+// English pluralization only — genuinely correct Arabic noun agreement for
+// each would need the same per-currency verification, which is out of scope
+// here.
 const CURRENCY_WORDS: Record<string, CurrencyWords> = {
   SAR: {
     majorNames: ["riyal", "riyals"],
     minorNames: ["halala", "halalas"],
-    arabic: { majorForms: AR_RIAL_FORMS, minorForms: AR_HALALA_FORMS },
+    arabic: { majorForms: AR_RIAL_FORMS, majorGender: "masculine", minorForms: AR_HALALA_FORMS, minorGender: "feminine" },
   },
-  AED: { majorNames: ["dirham", "dirhams"], minorNames: ["fils", "fils"] },
+  AED: {
+    majorNames: ["dirham", "dirhams"],
+    minorNames: ["fils", "fils"],
+    arabic: { majorForms: AR_DIRHAM_FORMS, majorGender: "masculine", minorForms: AR_FILS_FORMS, minorGender: "masculine" },
+  },
   USD: { majorNames: ["dollar", "dollars"], minorNames: ["cent", "cents"] },
   EUR: { majorNames: ["euro", "euros"], minorNames: ["cent", "cents"] },
   GBP: { majorNames: ["pound", "pounds"], minorNames: ["pence", "pence"] },
@@ -222,7 +251,14 @@ export function amountToWords(amount: DecimalInput, currencyCode: string): Amoun
   const en = englishAmountToWords(major, minor, currency.majorNames, currency.minorNames);
 
   const ar = currency.arabic
-    ? arabicAmountToWords(major, minor)
+    ? arabicAmountToWords(
+        major,
+        minor,
+        currency.arabic.majorForms,
+        currency.arabic.majorGender,
+        currency.arabic.minorForms,
+        currency.arabic.minorGender
+      )
     : // Best-effort fallback for currencies without verified Arabic grammar:
       // cardinal number words + the raw ISO code, no noun-agreement attempt.
       `${fixArabicOrthography(arCardinal(major, { gender: "masculine" }))} ${currencyCode.toUpperCase()}${
