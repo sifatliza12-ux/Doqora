@@ -121,6 +121,10 @@ export interface InvoiceDraftForEdit {
   status: InvoiceStatus;
   invoiceType: InvoiceType;
   issueDate: string;
+  /** HH:mm, extracted from issueDate's own UTC time — see toTimeInputValue.
+   * Invoices saved before this field existed always have 00:00 stored, so
+   * they simply show that as their issue time; no separate column exists. */
+  issueTime: string;
   dueDate: string;
   notes: string;
   customerId: string | null;
@@ -139,6 +143,14 @@ export type InvoiceEditResult =
 
 function toDateInputValue(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+// issueDate is a full DateTime column that can genuinely carry a real time
+// (see invoice-actions.ts) — extracted in UTC, matching how it's stamped in
+// the first place (no timezone conversion, the entered clock time is taken
+// as-is). A pre-fix row (always midnight) simply reads back as "00:00".
+function toTimeInputValue(date: Date): string {
+  return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 // Scoped to the current business the same way every other reader is —
@@ -171,6 +183,7 @@ export async function getInvoiceForEdit(invoiceId: string): Promise<InvoiceEditR
       status: invoice.status,
       invoiceType: invoice.invoiceType,
       issueDate: toDateInputValue(invoice.issueDate),
+      issueTime: toTimeInputValue(invoice.issueDate),
       dueDate: toDateInputValue(invoice.dueDate),
       notes: invoice.notes ?? "",
       customerId: invoice.customerId,
@@ -284,6 +297,7 @@ export async function getInvoiceForPrint(invoiceId: string, businessId: string):
       totalAmount: invoice.totalAmount,
       vatAmount: invoice.vatAmount,
       issueDate: toDateInputValue(invoice.issueDate),
+      issueTime: toTimeInputValue(invoice.issueDate),
     });
   const amountInWords: AmountInWords =
     invoice.amountInWordsEn && invoice.amountInWordsAr

@@ -27,13 +27,18 @@
 export interface QrPayloadInput {
   sellerName: string;
   vatRegistrationNumber: string;
-  // Business-level invoice date (YYYY-MM-DD, the same date already shown
-  // on the document as "Invoice date"). Combined with a fixed midnight UTC
-  // time to form the ISO 8601 timestamp ZATCA's Tag 3 requires. Using this
-  // rather than `new Date()` at call time keeps the QR identical between
-  // the live client-side preview and what gets persisted moments later on
-  // save — the same invariant the rest of this payload already relies on.
+  // Invoice issue date (YYYY-MM-DD, the same date shown on the document as
+  // "Invoice date") and the real captured issue time (HH:mm, 24-hour) —
+  // combined into the ISO 8601 timestamp ZATCA's Tag 3 requires. Stamped
+  // directly with a UTC "Z" marker with no timezone conversion, same
+  // treatment issueDate itself has always had (the entered clock time is
+  // taken as-is, not converted from the browser's local zone). Using these
+  // captured values rather than `new Date()` at call time keeps the QR
+  // identical between the live client-side preview and what gets persisted
+  // moments later on save — the same invariant the rest of this payload
+  // already relies on.
   issueDate: string;
+  issueTime: string;
   totalAmount: { toFixed(decimalPlaces: number): string };
   vatAmount: { toFixed(decimalPlaces: number): string };
 }
@@ -77,7 +82,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export function buildInvoiceQrPayload(input: QrPayloadInput): string {
-  const timestamp = `${input.issueDate}T00:00:00Z`;
+  const timestamp = `${input.issueDate}T${input.issueTime}:00Z`;
   const bytes = concatBytes([
     tlvField(1, input.sellerName),
     tlvField(2, input.vatRegistrationNumber),

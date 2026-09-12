@@ -46,6 +46,16 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Local wall-clock time (HH:mm), not UTC — the sensible default for a "what
+// time is it right now" field a real person is filling in. Combined with
+// issueDate and stamped with a literal UTC "Z" marker at save time (see
+// invoice-qr.ts) — the same simple, non-timezone-converting treatment
+// issueDate itself has always had.
+function nowTimeIso(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
 function formatSavedAgo(savedAt: number | null): string {
   if (savedAt === null) return "";
   const seconds = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
@@ -90,6 +100,7 @@ export function InvoiceBuilder({
   const isExistingQuotation = invoice?.invoiceType === "QUOTATION";
   const isExistingRealInvoiceType = Boolean(invoice) && invoice?.invoiceType !== "QUOTATION";
   const [issueDate, setIssueDate] = useState(invoice?.issueDate ?? todayIso());
+  const [issueTime, setIssueTime] = useState(invoice?.issueTime ?? nowTimeIso());
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? todayIso());
   const [notes, setNotes] = useState(invoice?.notes ?? "");
   const [lineItems, setLineItems] = useState<LineItemDraft[]>(() =>
@@ -172,6 +183,7 @@ export function InvoiceBuilder({
     totalAmount: calculated.totalAmount,
     vatAmount: calculated.vatAmount,
     issueDate,
+    issueTime,
   });
 
   // Same live-compute treatment as the QR payload above — regenerated from
@@ -203,6 +215,7 @@ export function InvoiceBuilder({
       customerId,
       invoiceType,
       issueDate,
+      issueTime,
       dueDate,
       notes,
       lineItems: lineItems.map((item) => ({
@@ -326,7 +339,7 @@ export function InvoiceBuilder({
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [canAutosave, customerId, invoiceType, issueDate, dueDate, notes, lineItems]);
+  }, [canAutosave, customerId, invoiceType, issueDate, issueTime, dueDate, notes, lineItems]);
 
   // If the user navigates away (in-app) while a debounced save hasn't
   // fired yet, flush it immediately rather than losing the edit — the
@@ -604,6 +617,14 @@ export function InvoiceBuilder({
                   type="date"
                   value={issueDate}
                   onChange={(event) => setIssueDate(event.target.value)}
+                  disabled={!isEditable}
+                  required
+                />
+                <Input
+                  label="Issue time"
+                  type="time"
+                  value={issueTime}
+                  onChange={(event) => setIssueTime(event.target.value)}
                   disabled={!isEditable}
                   required
                 />

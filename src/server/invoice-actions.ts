@@ -21,6 +21,17 @@ function isQuotationType(type: InvoiceType): boolean {
   return type === "QUOTATION";
 }
 
+// Real current UTC time (HH:mm) — for duplicateInvoice/convertQuoteToInvoice
+// below, which auto-create a fresh document with no user-facing issue-time
+// input of their own (unlike saveInvoiceDraft's manual builder flow). Using
+// the server clock's actual time here is the same "real timestamp instead
+// of a fixed fallback" fix, just derived from `new Date()` rather than a
+// form field. Takes the already-computed `now` so a single Date instance
+// backs both the date and time parts, rather than two separate clock reads.
+function nowTimeUtc(now: Date): string {
+  return `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 export interface SaveInvoiceLineItemInput {
   description: string;
   descriptionAr: string;
@@ -36,6 +47,7 @@ export interface SaveInvoiceDraftInput {
   customerId: string;
   invoiceType: string;
   issueDate: string;
+  issueTime: string;
   dueDate: string;
   notes: string;
   lineItems: SaveInvoiceLineItemInput[];
@@ -80,8 +92,8 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
   // Narrowed to a local const: property narrowing on `input.invoiceType`
   // doesn't survive into the $transaction closure below.
   const invoiceType = input.invoiceType;
-  if (!input.issueDate || !input.dueDate) {
-    return { status: "error", message: "Issue date and due date are required." };
+  if (!input.issueDate || !input.issueTime || !input.dueDate) {
+    return { status: "error", message: "Issue date, issue time, and due date are required." };
   }
 
   const nonEmptyLines = input.lineItems.filter(hasLineItemContent);
@@ -155,6 +167,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
       totalAmount: calculated.totalAmount,
       vatAmount: calculated.vatAmount,
       issueDate: input.issueDate,
+      issueTime: input.issueTime,
     });
     const amountWords = amountToWords(calculated.totalAmount, existing.currencyCode);
 
@@ -168,7 +181,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
         data: {
           customerId: customer.id,
           invoiceType,
-          issueDate: new Date(input.issueDate),
+          issueDate: new Date(`${input.issueDate}T${input.issueTime}:00Z`),
           dueDate: new Date(input.dueDate),
           notes: input.notes.trim() || null,
           customerSnapshot,
@@ -214,6 +227,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
       totalAmount: calculated.totalAmount,
       vatAmount: calculated.vatAmount,
       issueDate: input.issueDate,
+      issueTime: input.issueTime,
     });
     const amountWords = amountToWords(calculated.totalAmount, updatedBusiness.currencyCode);
 
@@ -224,7 +238,7 @@ export async function saveInvoiceDraft(input: SaveInvoiceDraftInput): Promise<Sa
         invoiceNumber,
         invoiceType,
         status: "DRAFT",
-        issueDate: new Date(input.issueDate),
+        issueDate: new Date(`${input.issueDate}T${input.issueTime}:00Z`),
         dueDate: new Date(input.dueDate),
         currencyCode: updatedBusiness.currencyCode,
         languageMode: updatedBusiness.defaultLanguageMode,
@@ -381,7 +395,9 @@ export async function duplicateInvoice(invoiceId: string): Promise<DuplicateInvo
     sortOrder: index,
   }));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const issueTime = nowTimeUtc(now);
 
   const created = await prisma.$transaction(async (tx) => {
     const isQuotation = isQuotationType(source.invoiceType);
@@ -398,6 +414,7 @@ export async function duplicateInvoice(invoiceId: string): Promise<DuplicateInvo
       totalAmount: calculated.totalAmount,
       vatAmount: calculated.vatAmount,
       issueDate: today,
+      issueTime,
     });
     const amountWords = amountToWords(calculated.totalAmount, updatedBusiness.currencyCode);
 
@@ -434,7 +451,7 @@ export async function duplicateInvoice(invoiceId: string): Promise<DuplicateInvo
         invoiceNumber,
         invoiceType: source.invoiceType,
         status: "DRAFT",
-        issueDate: new Date(today),
+        issueDate: new Date(`${today}T${issueTime}:00Z`),
         dueDate: new Date(today),
         currencyCode: updatedBusiness.currencyCode,
         languageMode: updatedBusiness.defaultLanguageMode,
@@ -518,7 +535,9 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<ConvertQuo
     sortOrder: index,
   }));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const issueTime = nowTimeUtc(now);
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -534,6 +553,7 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<ConvertQuo
         totalAmount: calculated.totalAmount,
         vatAmount: calculated.vatAmount,
         issueDate: today,
+        issueTime,
       });
       const amountWords = amountToWords(calculated.totalAmount, updatedBusiness.currencyCode);
 
@@ -565,7 +585,7 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<ConvertQuo
           invoiceNumber,
           invoiceType: "TAX_INVOICE",
           status: "DRAFT",
-          issueDate: new Date(today),
+          issueDate: new Date(`${today}T${issueTime}:00Z`),
           dueDate: new Date(today),
           currencyCode: updatedBusiness.currencyCode,
           languageMode: updatedBusiness.defaultLanguageMode,
